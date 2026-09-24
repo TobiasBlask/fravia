@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f6f1ea;
+  --ink: #1c1917;
+  --menstruation: #9b3d4a;
+  --follicular: #3f6f5b;
+  --ovulation: #c4843c;
+  --luteal: #5c5270;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --font-sans: var(--font-figtree), sans-serif;
+  --font-serif: var(--font-fraunces), serif;
+}
+
+html {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-figtree), sans-serif;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}

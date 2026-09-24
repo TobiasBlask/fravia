@@ -1,0 +1,42 @@
+# Fravia
+
+Fravia ist ein Kalender, der den Tag nach dir schneidet. Nach der Anmeldung wählst du eine Ausrichtung: Im Rhythmus, Auf der Pille, Mit Schmerz oder Wechseljahre. Danach zeigt der Monat, wofür der Tag da ist, und du legst in ein paar Taps ab, wie er war.
+
+Die Oberfläche ist Deutsch und spricht dich mit du an.
+
+## Lokal starten
+
+```bash
+npm install
+npx convex dev
+npm run dev
+```
+
+Lege eine `.env.local` an. Die Namen stehen in `.env.example`. Keine Werte ins Repository.
+
+`npm run build` erzeugt die Produktion, `npm start` startet sie (`next start`).
+
+## Variablen
+
+In der Next-App:
+
+- `NEXT_PUBLIC_CONVEX_URL`
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
+- `NEXT_PUBLIC_CLERK_SIGN_IN_URL` (`/sign-in`)
+- `NEXT_PUBLIC_CLERK_SIGN_UP_URL` (`/sign-up`)
+
+Auf dem Convex-Deployment:
+
+- `CLERK_FRONTEND_API_URL` (Clerk-Issuer, `applicationID` ist `convex`)
+
+Nur für das Deploy, nicht zur Laufzeit der App:
+
+- `CONVEX_DEPLOY_KEY`
+
+```bash
+npx convex env set CLERK_FRONTEND_API_URL <issuer>
+npx convex deploy
+```
+
+Für eine stabile Preview: `CONVEX_PREVIEW_NAME=fravia`.
