@@ -44,5 +44,5 @@ input[type="date"]::-webkit-date-and-time-value {
 button,
 input,
 textarea {
-  font: inherit;
+  font-family: inherit;
 }

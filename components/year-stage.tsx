@@ -2,7 +2,7 @@
 
 import { formatMonthName, iso } from "@/lib/dates";
 import type { DayLog, Profile } from "@/lib/types";
-import { dayMark, tintHex } from "@/lib/voice";
+import { dayMark, solidHex } from "@/lib/voice";
 import { useLang } from "@/components/lang";
 
 export function YearStage({
@@ -26,22 +26,21 @@ export function YearStage({
         <h2 className="font-serif text-5xl">{year}</h2>
         <button type="button" className="min-h-12" onClick={() => onYear(year + 1)}>{year + 1}</button>
       </div>
-      <div className="mt-6 grid grid-cols-2 gap-3 min-[900px]:grid-cols-3">
+      <div className="mt-6 grid bg-paper">
         {Array.from({ length: 12 }, (_, month) => {
           const mid = new Date(year, month, 15);
           const mark = dayMark(profile, mid, logs[iso(mid)]);
-          const tint = tintHex(mark.tint);
+          const tint = solidHex(mark.tint);
           return (
             <button
               key={month}
               type="button"
               onClick={() => onOpenMonth(month)}
-              className="min-h-24 px-3 py-4 text-left"
-              style={{ background: `color-mix(in srgb, ${tint} 18%, var(--paper))` }}
+              className="flex min-h-14 items-baseline justify-between gap-4 border-b border-ink/10 py-2 text-left"
             >
-              <span className="font-serif text-2xl capitalize">{formatMonthName(mid, lang)}</span>
+              <span className="font-serif text-3xl capitalize min-[900px]:text-4xl">{formatMonthName(mid, lang)}</span>
               {mark.band ? (
-                <span className="mt-2 block text-sm" style={{ color: tint }}>{mark.band}</span>
+                <span className="text-sm" style={{ color: tint }}>{mark.band}</span>
               ) : null}
             </button>
           );

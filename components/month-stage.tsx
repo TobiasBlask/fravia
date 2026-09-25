@@ -13,7 +13,7 @@ import {
   monthWeeks,
 } from "@/lib/dates";
 import type { DayLog, Profile } from "@/lib/types";
-import { dayMark, monthCaption, tintHex } from "@/lib/voice";
+import { dayMark, monthCaption, solidHex } from "@/lib/voice";
 
 export function MonthStage({
   profile,
@@ -50,7 +50,7 @@ export function MonthStage({
   for (const day of days) {
     const last = runs[runs.length - 1];
     if (last && last.band === day.mark.band) last.days.push(day);
-    else runs.push({ band: day.mark.band, tint: tintHex(day.mark.tint), days: [day] });
+    else runs.push({ band: day.mark.band, tint: solidHex(day.mark.tint), days: [day] });
   }
 
   return (
@@ -81,7 +81,7 @@ export function MonthStage({
       ) : null}
       {layout === "weeks" ? (
         <div className="mt-6">
-          <div className="grid grid-cols-7 gap-1 text-center text-[11px] uppercase tracking-[0.14em] text-ink/60 min-[900px]:gap-2">
+          <div className="grid grid-cols-7 gap-1 text-center text-sm text-ink/50 min-[900px]:gap-2">
             {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((day) => (
               <span key={day} className="py-2">
                 {day}
@@ -96,8 +96,7 @@ export function MonthStage({
                     <DayButton
                       key={iso(date)}
                       date={date}
-                      tint={tintHex(dayMark(profile, date, logs[iso(date)]).tint)}
-                      filled={dayMark(profile, date, logs[iso(date)]).tint !== "paper"}
+                      tint={solidHex(dayMark(profile, date, logs[iso(date)]).tint)}
                       band={dayMark(profile, date, logs[iso(date)]).band}
                       selected={selected === iso(date)}
                       today={iso(date) === todayIso}
@@ -120,10 +119,7 @@ export function MonthStage({
           {runs.map((run) => (
             <section
               key={`${run.band}-${run.days[0].key}`}
-              className="px-1 py-3 min-[900px]:px-3 min-[900px]:py-5"
-              style={{
-                background: `color-mix(in srgb, ${run.tint} 16%, var(--paper))`,
-              }}
+              className="bg-paper px-1 py-3 min-[900px]:px-3 min-[900px]:py-5"
             >
               <div className="mb-2 flex items-baseline justify-between px-1">
                 <h3
@@ -132,7 +128,7 @@ export function MonthStage({
                 >
                   {run.band}
                 </h3>
-                <p className="text-xs tracking-wide">
+                <p className="text-sm">
                   {formatDay(run.days[0].date)}–{formatDay(run.days[run.days.length - 1].date)}
                 </p>
               </div>
@@ -142,7 +138,6 @@ export function MonthStage({
                     key={day.key}
                     date={day.date}
                     tint={run.tint}
-                    filled={false}
                     band={day.mark.band}
                     selected={selected === day.key}
                     today={day.key === todayIso}
@@ -165,7 +160,6 @@ export function MonthStage({
 function DayButton({
   date,
   tint,
-  filled,
   band,
   selected,
   today,
@@ -177,7 +171,6 @@ function DayButton({
 }: {
   date: Date;
   tint: string;
-  filled: boolean;
   band: string;
   selected: boolean;
   today: boolean;
@@ -195,25 +188,19 @@ function DayButton({
       aria-pressed={selected}
       aria-label={`${formatLong(date, lang)}${band ? `, ${band}` : ""}`}
       onClick={() => onSelect(iso(date))}
-      className={`flex flex-col items-center justify-center ${tall ? "min-h-16 min-[900px]:min-h-28" : "min-h-14 w-[calc((100%-1.875rem)/7)] min-[900px]:min-h-24"}`}
-      style={{
-        background: selected
-          ? "var(--paper)"
-          : filled
-            ? `color-mix(in srgb, ${tint} 24%, transparent)`
-            : "transparent",
-        outline: selected ? "1px solid var(--ink)" : "none",
-        boxShadow: today ? "inset 0 -2px 0 var(--ink)" : undefined,
-      }}
+      className={`flex flex-col items-center justify-center ${tall ? "min-h-16 min-[900px]:min-h-28" : "min-h-14 w-[calc((100%-1.875rem)/7)] min-[900px]:min-h-24"} ${selected ? "border-b border-ink" : ""}`}
     >
-      <span className="text-[10px] uppercase tracking-wide text-ink/60">
+      <span className="text-sm text-ink/60">
         {today ? todayWord : formatWeekday(date, lang)}
       </span>
-      <span className={today ? "font-serif text-lg min-[900px]:text-2xl" : "text-base min-[900px]:text-xl"}>
+      <span
+        className={today ? "font-serif text-3xl leading-none min-[900px]:text-4xl" : "font-serif text-xl leading-none min-[900px]:text-2xl"}
+        style={today ? { color: tint } : undefined}
+      >
         {date.getDate()}
       </span>
       <span className={`mt-1 h-px w-3 ${hasLog ? "bg-ink" : "bg-transparent"}`} />
-      {count > 0 ? <span className="text-[10px]">{count}</span> : null}
+      {count > 0 ? <span className="text-sm">{count}</span> : null}
     </button>
   );
 }

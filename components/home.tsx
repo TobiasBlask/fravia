@@ -16,13 +16,14 @@ import { Workbook } from "@/components/workbook";
 import { YearStage } from "@/components/year-stage";
 import { clockOf, dueReminders, endOf, minutesOf, reminderLine } from "@/lib/clock";
 import { addDays, iso, parseISODate, startOfMonth, weekDates } from "@/lib/dates";
-import { openingLine } from "@/lib/plan";
 import type { DayEvent } from "@/lib/types";
-import { PERSONA_LINE, stanceFor, tintHex } from "@/lib/voice";
+import { stanceFor, tintHex } from "@/lib/voice";
+
+const VIEWS = ["day", "week", "month", "year"] as const;
 
 export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
   const { signOut } = useClerk();
-  const { lang, say, t } = useLang();
+  const { say, t } = useLang();
   const profile = journal.profile;
   const today = useMemo(() => new Date(), []);
   const todayIso = iso(today);
@@ -62,11 +63,6 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
   const stance = say(stanceFor(profile, today, journal.logs[todayIso]));
   const color = tintHex(stance.tint);
   const openDate = selected || todayIso;
-  const hello = profile.displayName
-    ? lang === "de"
-      ? `Hallo ${profile.displayName}, schön dass du da bist.`
-      : profile.displayName
-    : null;
 
   function selectDay(date: string) {
     setSelected(date);
@@ -97,43 +93,51 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
   return (
     <>
       <Wash color={color} />
-      <div className="mx-auto min-h-dvh w-full max-w-[1400px] px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-28 min-[900px]:px-10 min-[900px]:py-10 min-[900px]:pb-10">
+      <div className="mx-auto min-h-dvh w-full max-w-[1400px] px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-28 min-[900px]:px-8 min-[900px]:py-8 min-[900px]:pb-8">
         {journal.offer ? (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-ink/15 pb-4">
             <p className="max-w-md text-sm">{t("takeBody")}</p>
             <div className="flex gap-3">
-              <button type="button" className="min-h-12 bg-ink px-4 text-paper" onClick={() => void journal.takeDevice()}>{t("takeYes")}</button>
-              <button type="button" className="min-h-12 px-3" onClick={journal.dismissOffer}>{t("leave")}</button>
+              <button type="button" className="min-h-11 bg-ink px-4 text-paper" onClick={() => void journal.takeDevice()}>{t("takeYes")}</button>
+              <button type="button" className="min-h-11 px-3" onClick={journal.dismissOffer}>{t("leave")}</button>
             </div>
           </div>
         ) : null}
-        <div className="min-[900px]:grid min-[900px]:grid-cols-[minmax(300px,420px)_minmax(0,1fr)] min-[900px]:items-start min-[900px]:gap-x-16 xl:grid-cols-[minmax(340px,460px)_minmax(0,1fr)] xl:gap-x-24">
-          <header className="min-[900px]:sticky min-[900px]:top-8">
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-xs uppercase tracking-[0.18em]">Fravia</p>
-              <div className="flex items-center gap-4 text-sm">
-                <button type="button" className="min-h-12" onClick={() => journal.setRevising(true)}>{t("revise")}</button>
-                <Link href="/settings" className="inline-flex min-h-12 items-center">{t("settings")}</Link>
-                {journal.guestMode ? null : (
-                  <button type="button" className="min-h-12" onClick={() => signOut({ redirectUrl: "/" })}>{t("signOut")}</button>
-                )}
-              </div>
-            </div>
-            {journal.guestMode ? <p className="mt-3 text-sm">{t("guestNote")}</p> : null}
-            {hello ? <p className="mt-6 font-serif text-2xl">{hello}</p> : null}
-            <p className="mt-6 text-sm min-[900px]:mt-8">{PERSONA_LINE[profile.persona]}</p>
-            <p className="mt-6 font-serif text-[1.65rem] leading-tight min-[900px]:hidden">
-              {openingLine(profile, today, journal.logs)}
-            </p>
-            <div className="mt-8 hidden min-[900px]:block">
-              <Workbook journal={journal} today={today} onPlaced={placed} />
-            </div>
-            <details className="mt-8 hidden min-[900px]:block">
-              <summary className="min-h-12 cursor-pointer text-sm">Heute ablegen</summary>
-              <div className="mt-6">
+        <header className="flex flex-col gap-3 min-[900px]:flex-row min-[900px]:items-center min-[900px]:justify-between">
+          <p className="font-serif text-3xl leading-none min-[900px]:text-4xl">Fravia</p>
+          <div className="flex rounded-[12px] border border-ink/20 p-1" role="tablist" aria-label="Ansicht">
+            {VIEWS.map((item) => (
+              <button
+                key={item}
+                type="button"
+                role="tab"
+                aria-selected={view === item}
+                className={`min-h-11 flex-1 px-3 text-sm transition-colors duration-150 min-[900px]:flex-none min-[900px]:px-4 ${view === item ? "rounded-[8px] bg-ink text-paper" : ""}`}
+                onClick={() => setPicked(item)}
+              >
+                {item === "day" ? t("dayView") : t(item)}
+              </button>
+            ))}
+          </div>
+        </header>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4">
+          <button type="button" className="min-h-11 text-sm min-[900px]:hidden" onClick={() => setSheet(true)}>{t("checkin")}</button>
+          <button type="button" className="min-h-11 text-sm" onClick={() => journal.setRevising(true)}>{t("revise")}</button>
+          <Link href="/settings" className="inline-flex min-h-11 items-center text-sm">{t("settings")}</Link>
+          {journal.guestMode ? null : (
+            <button type="button" className="min-h-11 text-sm" onClick={() => signOut({ redirectUrl: "/" })}>{t("signOut")}</button>
+          )}
+        </div>
+        {journal.guestMode ? <p className="mt-2 text-sm">{t("guestNote")}</p> : null}
+        <div className="mt-6 min-[900px]:grid min-[900px]:grid-cols-[minmax(240px,300px)_minmax(0,1fr)] min-[900px]:items-start min-[900px]:gap-x-8">
+          <aside className="hidden min-[900px]:block">
+            <Workbook journal={journal} today={today} onPlaced={placed} />
+            <details className="mt-10">
+              <summary className="min-h-11 cursor-pointer text-sm">{t("checkin")}</summary>
+              <div className="mt-6 bg-paper">
                 <p className="font-serif text-4xl leading-none" style={{ color }}>{stance.kicker}</p>
                 {stance.detail ? (
-                  <p className={stance.detailTone === "strong" ? "mt-3 font-serif text-2xl" : "mt-3 max-w-sm text-sm leading-snug text-ink/80"}>
+                  <p className={stance.detailTone === "strong" ? "mt-3 font-serif text-2xl" : "mt-3 max-w-sm text-base leading-snug"}>
                     {stance.detail}
                   </p>
                 ) : null}
@@ -141,11 +145,11 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
                 <p className="mt-1 font-serif text-xl leading-tight">{stance.lines[1]}</p>
                 <div className="mt-6 grid gap-4">
                   <div>
-                    <p className="text-[11px] uppercase tracking-[0.16em]">{t("food")}</p>
+                    <p className="text-sm text-ink/60">{t("food")}</p>
                     <p className="mt-1 text-base leading-snug">{stance.food}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] uppercase tracking-[0.16em]">{t("move")}</p>
+                    <p className="text-sm text-ink/60">{t("move")}</p>
                     <p className="mt-1 text-base leading-snug">{stance.move}</p>
                   </div>
                 </div>
@@ -164,53 +168,47 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
                 </div>
               </div>
             </details>
-          </header>
-          <div className="mt-6 min-[900px]:mt-0 min-[900px]:h-[calc(100dvh-5rem)] min-[900px]:overflow-hidden">
+          </aside>
+          <div className="min-[900px]:flex min-[900px]:h-[calc(100dvh-7.5rem)] min-[900px]:min-h-0 min-[900px]:flex-col min-[900px]:overflow-hidden min-[900px]:bg-paper">
             {reminders.length > 0 ? (
               <div className="mb-3 grid gap-2">
                 {reminders.map((event) => (
                   <div key={event.id} className="flex items-center justify-between gap-3 border-b border-ink/15 pb-2">
                     <p className="text-sm">{reminderLine(event, today)}</p>
-                    <button type="button" className="min-h-10 shrink-0 text-sm" onClick={() => setHiddenReminders((current) => [...current, event.id])}>
+                    <button type="button" className="min-h-11 shrink-0 text-sm" onClick={() => setHiddenReminders((current) => [...current, event.id])}>
                       {t("done")}
                     </button>
                   </div>
                 ))}
               </div>
             ) : null}
-            <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-              {(["day", "week", "month", "year"] as const).map((item) => (
-                <button key={item} type="button" className={`min-h-12 ${view === item ? "border-b border-ink" : ""}`} onClick={() => setPicked(item)}>
-                  {item === "day" ? t("dayView") : t(item)}
-                </button>
-              ))}
-              <button type="button" className="min-h-12" onClick={jumpToday}>{t("todayJump")}</button>
+            <div className="mb-3 flex flex-wrap items-center gap-3">
               <input
                 type="date"
                 aria-label={t("todayJump")}
-                className="min-h-12 bg-transparent"
+                className="min-h-11 bg-transparent"
                 value={selected}
                 onChange={(event) => {
                   if (!event.target.value) return;
                   selectDay(event.target.value);
                 }}
               />
+              <label className="min-w-0 flex-1">
+                <span className="sr-only">{t("search")}</span>
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={t("search")}
+                  className="min-h-11 w-full border-b border-ink/30 bg-transparent"
+                />
+              </label>
             </div>
-            <label className="mb-3 block">
-              <span className="sr-only">{t("search")}</span>
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t("search")}
-                className="min-h-12 w-full border-b border-ink/30 bg-transparent"
-              />
-            </label>
             {needle && hits.length === 0 ? <p className="mb-3 text-sm">{t("searchEmpty")}</p> : null}
             {hits.length > 0 ? (
-              <ul className="mb-3 grid gap-1">
+              <ul className="mb-3 grid">
                 {hits.map((event) => (
                   <li key={event.id}>
-                    <button type="button" className="min-h-10 text-left text-sm" onClick={() => { selectDay(event.date); setQuery(""); setEditor({ event, date: event.date }); }}>
+                    <button type="button" className="min-h-11 text-left text-sm" onClick={() => { selectDay(event.date); setQuery(""); setEditor({ event, date: event.date }); }}>
                       {event.date} {event.time ? `${event.time} ` : ""}{event.title}
                     </button>
                   </li>
@@ -218,12 +216,12 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
               </ul>
             ) : null}
             {view === "day" || view === "week" ? (
-              <div className="min-[900px]:h-[calc(100dvh-14rem)]">
-                <div className="mb-2 flex items-center justify-between text-sm">
-                  <button type="button" className="min-h-12 px-3" onClick={() => selectDay(iso(addDays(parseISODate(selected), view === "week" ? -7 : -1)))} aria-label={t("back")}>
+              <div className="min-[900px]:flex min-[900px]:min-h-0 min-[900px]:flex-1 min-[900px]:flex-col">
+                <div className="mb-1 flex items-center justify-between">
+                  <button type="button" className="min-h-11 min-w-11 text-lg" onClick={() => selectDay(iso(addDays(parseISODate(selected), view === "week" ? -7 : -1)))} aria-label={t("back")}>
                     ‹
                   </button>
-                  <button type="button" className="min-h-12 px-3" onClick={() => selectDay(iso(addDays(parseISODate(selected), view === "week" ? 7 : 1)))} aria-label={t("dayView")}>
+                  <button type="button" className="min-h-11 min-w-11 text-lg" onClick={() => selectDay(iso(addDays(parseISODate(selected), view === "week" ? 7 : 1)))} aria-label={t("dayView")}>
                     ›
                   </button>
                 </div>
@@ -247,45 +245,50 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
               </div>
             ) : null}
             {view === "month" ? (
-              <MonthStage
-                profile={profile}
-                cursor={startOfMonth(cursor)}
-                today={today}
-                logs={journal.logs}
-                selected={selected}
-                counts={counts}
-                onCursor={setCursor}
-                onSelect={selectDay}
-              />
+              <div className="bg-paper">
+                <MonthStage
+                  profile={profile}
+                  cursor={startOfMonth(cursor)}
+                  today={today}
+                  logs={journal.logs}
+                  selected={selected}
+                  counts={counts}
+                  onCursor={setCursor}
+                  onSelect={selectDay}
+                />
+              </div>
             ) : null}
             {view === "year" ? (
-              <YearStage
-                profile={profile}
-                year={cursor.getFullYear()}
-                logs={journal.logs}
-                onYear={(year) => setCursor(new Date(year, cursor.getMonth(), 1))}
-                onOpenMonth={(month) => {
-                  setCursor(new Date(cursor.getFullYear(), month, 1));
-                  setPicked("month");
-                }}
-              />
+              <div className="bg-paper">
+                <YearStage
+                  profile={profile}
+                  year={cursor.getFullYear()}
+                  logs={journal.logs}
+                  onYear={(year) => setCursor(new Date(year, cursor.getMonth(), 1))}
+                  onOpenMonth={(month) => {
+                    setCursor(new Date(cursor.getFullYear(), month, 1));
+                    setPicked("month");
+                  }}
+                />
+              </div>
             ) : null}
           </div>
         </div>
       </div>
-      <div className="fixed inset-x-0 bottom-0 z-20 flex gap-3 border-t border-ink/10 bg-paper/92 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] min-[900px]:hidden">
-        <button type="button" className="min-h-14 flex-1 bg-ink text-paper" onClick={() => setTalk(true)}>
-          Mit Fravia planen
+      <div className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-between gap-3 border-t border-ink/10 bg-paper px-5 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] min-[900px]:hidden">
+        <button type="button" className="min-h-11 px-2 text-base" onClick={jumpToday}>
+          {t("todayJump")}
+        </button>
+        <button type="button" className="min-h-11 px-2 text-base" onClick={() => setTalk(true)}>
+          Dialog
         </button>
         <button
           type="button"
-          className="min-h-14 px-4"
-          onClick={() => {
-            setSelected(todayIso);
-            setSheet(true);
-          }}
+          aria-label="Eintragen"
+          className="grid h-12 w-12 place-items-center rounded-full bg-ink font-sans text-2xl leading-none text-paper transition-opacity duration-150"
+          onClick={() => setEditor({ date: selected })}
         >
-          Heute
+          +
         </button>
       </div>
       {editor ? (
@@ -303,7 +306,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
         </div>
       ) : null}
       {sheet ? (
-        <div className="fixed inset-0 z-30 overflow-y-auto px-4 pt-[max(1rem,env(safe-area-inset-top))] min-[900px]:hidden" style={{ background: `radial-gradient(80% 40% at 0% 0%, color-mix(in srgb, ${color} 34%, transparent), transparent 70%), var(--paper)` }}>
+        <div className="fixed inset-0 z-30 overflow-y-auto bg-paper px-4 pt-[max(1rem,env(safe-area-inset-top))] min-[900px]:hidden">
           <DayCheckin
             profile={profile}
             date={openDate}

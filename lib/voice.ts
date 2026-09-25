@@ -416,6 +416,18 @@ export function tintHex(tint: TintKey) {
   return tint === "paper" ? "#f6f1ea" : TINT_HEX[tint];
 }
 
+// Paper on ovulation #c4843c is 2.8:1. #8c5e2a keeps the hue and clears 4.5:1.
+const SOLID_HEX: Record<Exclude<TintKey, "paper">, string> = {
+  menstruation: "#9b3d4a",
+  follicular: "#3f6f5b",
+  ovulation: "#8c5e2a",
+  luteal: "#5c5270",
+};
+
+export function solidHex(tint: TintKey) {
+  return tint === "paper" ? "#1c1917" : SOLID_HEX[tint];
+}
+
 export function monthCaption(profile: Profile, bands: string[]) {
   if (profile.persona === "menopause") {
     return "Keine berechnete Phase. Ich nehme Schlaf, Hitze und Stimmung.";

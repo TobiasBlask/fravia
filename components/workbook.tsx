@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { useJournal } from "@/components/use-journal";
 import { parseISODate } from "@/lib/dates";
-import { CHIPS, openingLine, planSentence, type Proposal } from "@/lib/plan";
+import { openingLine, planSentence, type Proposal } from "@/lib/plan";
 
 type Turn = { who: "fravia" | "du"; text: string };
 
@@ -29,15 +29,10 @@ export function Workbook({
   const [carry, setCarry] = useState("");
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [placing, setPlacing] = useState<string | null>(null);
-  const scroller = useRef<HTMLDivElement>(null);
   const opening = frozen ?? live;
   const fieldId = onClose ? "plan-line-screen" : "plan-line";
-
-  useEffect(() => {
-    const node = scroller.current;
-    if (!node) return;
-    node.scrollTo({ top: node.scrollHeight });
-  }, [turns, proposals, opening]);
+  const fravia = [...turns].reverse().find((turn) => turn.who === "fravia")?.text ?? opening;
+  const mine = [...turns].reverse().find((turn) => turn.who === "du")?.text;
 
   if (!profile || !opening) return null;
 
@@ -76,7 +71,7 @@ export function Workbook({
       setCarry("");
       onPlaced(proposal.date);
     } catch {
-      setTurns((current) => [...current, { who: "fravia", text: "Das hat nicht gehalten. Sag es noch einmal." }]);
+      setTurns((current) => [...current, { who: "fravia", text: "Das hat nicht geklappt. Sag es noch einmal." }]);
     } finally {
       setPlacing(null);
     }
@@ -88,49 +83,48 @@ export function Workbook({
   }
 
   return (
-    <section className={onClose ? "flex h-dvh min-h-0 flex-col" : "flex max-h-[calc(100dvh-8rem)] min-h-[24rem] flex-col"}>
+    <section className={onClose ? "flex h-dvh min-h-0 flex-col bg-paper" : "flex flex-col"}>
       {onClose ? (
         <div className="flex items-center justify-between gap-4 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
-          <p className="text-xs uppercase tracking-[0.18em]">Fravia</p>
-          <button type="button" className="min-h-12" onClick={onClose}>
+          <p className="font-serif text-3xl leading-none">Fravia</p>
+          <button type="button" className="min-h-11 px-2" onClick={onClose}>
             Schließen
           </button>
         </div>
       ) : null}
-      <div ref={scroller} className={`min-h-0 flex-1 space-y-5 overflow-y-auto ${onClose ? "px-4 py-6" : "py-1 pr-1"}`}>
-        <p className="font-serif text-[1.65rem] leading-tight">{opening}</p>
-        {turns.map((turn, index) =>
-          turn.who === "du" ? (
-            <p key={`${turn.who}-${index}`} className="text-base leading-snug text-ink/70">
-              {turn.text}
-            </p>
-          ) : (
-            <p key={`${turn.who}-${index}`} className="font-serif text-2xl leading-tight">
-              {turn.text}
-            </p>
-          ),
-        )}
+      <div className={onClose ? "flex min-h-0 flex-1 flex-col px-4 py-8" : "flex flex-col"}>
+        <p className="font-serif text-[1.75rem] leading-tight min-[900px]:text-4xl">{fravia}</p>
+        {mine ? <p className="mt-4 text-base leading-snug text-ink/75">{mine}</p> : null}
         {proposals.length > 0 ? (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {proposals.map((proposal) => (
-              <button
-                key={`${proposal.date}-${proposal.title}`}
-                type="button"
-                className="min-h-12 bg-ink px-4 text-paper disabled:opacity-50"
-                disabled={placing !== null}
-                onClick={() => void place(proposal)}
-              >
-                Ja, {dayName(proposal.date)}
-              </button>
-            ))}
-            <button type="button" className="min-h-12 px-3" disabled={placing !== null} onClick={decline}>
-              Noch nicht
-            </button>
+          <div className="mt-8 grid gap-3">
+            {proposals.map((proposal) => {
+              const when = proposalWhen(proposal.date);
+              return (
+                <div key={`${proposal.date}-${proposal.title}`} className="rounded-[12px] border border-ink/15 bg-paper px-4 py-4">
+                  <p className="font-serif text-3xl leading-none min-[900px]:text-4xl">{when.weekday}</p>
+                  <p className="mt-2 font-serif text-5xl leading-none">{when.day}.</p>
+                  <p className="mt-3 text-base leading-snug">{reasonLine(fravia)}</p>
+                  <div className="mt-4 flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="min-h-11 bg-ink px-4 text-paper transition-opacity duration-150 disabled:opacity-50"
+                      disabled={placing !== null}
+                      onClick={() => void place(proposal)}
+                    >
+                      Eintragen
+                    </button>
+                    <button type="button" className="min-h-11 px-3" disabled={placing !== null} onClick={decline}>
+                      Nicht jetzt
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : null}
       </div>
       <form
-        className={onClose ? "border-t border-ink/10 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" : "border-t border-ink/10 pt-3"}
+        className={onClose ? "px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" : "mt-8"}
         onSubmit={(event) => {
           event.preventDefault();
           speak(draft);
@@ -146,23 +140,11 @@ export function Workbook({
             onChange={(event) => setDraft(event.target.value)}
             placeholder="Ein Satz reicht."
             autoComplete="off"
-            className="min-h-12 w-full border-b border-ink/30 bg-transparent"
+            className="min-h-11 w-full border-b border-ink/30 bg-transparent"
           />
-          <button type="submit" className="min-h-12 shrink-0 px-3">
+          <button type="submit" className="min-h-11 shrink-0 px-3">
             Senden
           </button>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2 pb-1">
-          {CHIPS.map((chip) => (
-            <button
-              key={chip}
-              type="button"
-              className="min-h-10 border border-ink/20 px-3 text-left text-sm"
-              onClick={() => speak(chip, true)}
-            >
-              {chip}
-            </button>
-          ))}
         </div>
       </form>
     </section>
@@ -172,4 +154,19 @@ export function Workbook({
 function dayName(date: string) {
   const name = new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(parseISODate(date));
   return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function proposalWhen(date: string) {
+  const value = parseISODate(date);
+  const weekday = new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(value);
+  return { weekday: weekday.charAt(0).toUpperCase() + weekday.slice(1), day: value.getDate() };
+}
+
+function reasonLine(text: string) {
+  const parts = text
+    .split(/(?<=[.!])\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part && !/^soll ich\b/i.test(part) && !/^welchen tag\b/i.test(part));
+  const named = parts.find((part) => /phase|ovulation|menstruation|schmerz|schätzung|energie|pause/i.test(part));
+  return named ?? parts[0] ?? text;
 }

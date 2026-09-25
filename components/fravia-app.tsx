@@ -37,7 +37,7 @@ function Status({ line, action, onAction }: { line: string; action?: string; onA
   return (
     <main className="flex min-h-dvh flex-col justify-between px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <Wash color="#5c5270" />
-      <p className="text-xs uppercase tracking-[0.18em]">Fravia</p>
+      <p className="font-serif text-3xl leading-none">Fravia</p>
       <h1 className="max-w-md font-serif text-4xl leading-tight">{line}</h1>
       {action ? (
         <button type="button" className="min-h-14 bg-ink text-paper" onClick={onAction}>{action}</button>
