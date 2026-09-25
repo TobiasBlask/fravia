@@ -1,5 +1,6 @@
 "use client";
 
+import { useLang } from "@/components/lang";
 import {
   addMonths,
   formatDay,
@@ -20,6 +21,7 @@ export function MonthStage({
   today,
   logs,
   selected,
+  counts,
   onCursor,
   onSelect,
 }: {
@@ -28,9 +30,11 @@ export function MonthStage({
   today: Date;
   logs: Record<string, DayLog>;
   selected: string | null;
+  counts?: Record<string, number>;
   onCursor: (next: Date) => void;
   onSelect: (date: string) => void;
 }) {
+  const { lang, t } = useLang();
   const todayIso = iso(today);
   const days = monthDates(cursor).map((date) => {
     const key = iso(date);
@@ -57,18 +61,18 @@ export function MonthStage({
           className="min-h-12 pr-4 text-left text-sm"
           onClick={() => onCursor(addMonths(cursor, -1))}
         >
-          {formatMonthName(addMonths(cursor, -1))}
+          {formatMonthName(addMonths(cursor, -1), lang)}
         </button>
         <button
           type="button"
           className="min-h-12 pl-4 text-right text-sm"
           onClick={() => onCursor(addMonths(cursor, 1))}
         >
-          {formatMonthName(addMonths(cursor, 1))}
+          {formatMonthName(addMonths(cursor, 1), lang)}
         </button>
       </div>
       <h2 className="font-serif text-[2.6rem] leading-none capitalize min-[900px]:text-6xl">
-        {formatMonth(cursor)}
+        {formatMonth(cursor, lang)}
       </h2>
       {caption ? (
         <p className="mt-3 max-w-xl text-sm leading-snug min-[900px]:text-base">
@@ -97,6 +101,8 @@ export function MonthStage({
                       band={dayMark(profile, date, logs[iso(date)]).band}
                       selected={selected === iso(date)}
                       today={iso(date) === todayIso}
+                      todayWord={t("todayWord")}
+                      count={counts?.[iso(date)] ?? 0}
                       hasLog={Boolean(logs[iso(date)])}
                       onSelect={onSelect}
                       tall
@@ -140,6 +146,8 @@ export function MonthStage({
                     band={day.mark.band}
                     selected={selected === day.key}
                     today={day.key === todayIso}
+                    todayWord={t("todayWord")}
+                    count={counts?.[day.key] ?? 0}
                     hasLog={day.hasLog}
                     onSelect={onSelect}
                   />
@@ -149,7 +157,7 @@ export function MonthStage({
           ))}
         </div>
       )}
-      <p className="sr-only">{formatLong(today)}</p>
+      <p className="sr-only">{formatLong(today, lang)}</p>
     </section>
   );
 }
@@ -161,6 +169,8 @@ function DayButton({
   band,
   selected,
   today,
+  todayWord,
+  count,
   hasLog,
   tall,
   onSelect,
@@ -171,16 +181,19 @@ function DayButton({
   band: string;
   selected: boolean;
   today: boolean;
+  todayWord: string;
+  count: number;
   hasLog: boolean;
   tall?: boolean;
   onSelect: (date: string) => void;
 }) {
+  const { lang } = useLang();
   return (
     <button
       type="button"
       aria-current={today ? "date" : undefined}
       aria-pressed={selected}
-      aria-label={`${formatLong(date)}${band ? `, ${band}` : ""}`}
+      aria-label={`${formatLong(date, lang)}${band ? `, ${band}` : ""}`}
       onClick={() => onSelect(iso(date))}
       className={`flex flex-col items-center justify-center ${tall ? "min-h-16 min-[900px]:min-h-28" : "min-h-14 w-[calc((100%-1.875rem)/7)] min-[900px]:min-h-24"}`}
       style={{
@@ -194,12 +207,13 @@ function DayButton({
       }}
     >
       <span className="text-[10px] uppercase tracking-wide text-ink/60">
-        {today ? "heute" : formatWeekday(date)}
+        {today ? todayWord : formatWeekday(date, lang)}
       </span>
       <span className={today ? "font-serif text-lg min-[900px]:text-2xl" : "text-base min-[900px]:text-xl"}>
         {date.getDate()}
       </span>
       <span className={`mt-1 h-px w-3 ${hasLog ? "bg-ink" : "bg-transparent"}`} />
+      {count > 0 ? <span className="text-[10px]">{count}</span> : null}
     </button>
   );
 }

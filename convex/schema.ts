@@ -22,16 +22,6 @@ export default defineSchema({
     email: v.optional(v.string()),
   }).index("by_token", ["tokenIdentifier"]),
 
-  profiles: defineTable({
-    userId: v.id("users"),
-    persona,
-    lastPeriodStart: v.optional(v.string()),
-    cycleLength: v.optional(v.number()),
-    periodLength: v.optional(v.number()),
-    lutealLength: v.optional(v.number()),
-    packLength: v.optional(v.number()),
-  }).index("by_user", ["userId"]),
-
   dayLogs: defineTable({
     userId: v.id("users"),
     date: v.string(),
@@ -55,5 +45,82 @@ export default defineSchema({
     sleep: v.optional(
       v.union(v.literal("steady"), v.literal("broken"), v.literal("short")),
     ),
+    symptoms: v.optional(v.array(v.string())),
+    ovulation: v.optional(v.boolean()),
   }).index("by_user_date", ["userId", "date"]),
+
+  events: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    kind: v.union(
+      v.literal("termin"),
+      v.literal("mahlzeit"),
+      v.literal("sport"),
+      v.literal("geburtstag"),
+    ),
+    date: v.string(),
+    time: v.optional(v.string()),
+    note: v.optional(v.string()),
+    freq: v.string(),
+    seriesId: v.string(),
+  }).index("by_user_date", ["userId", "date"]),
+
+  todos: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    date: v.string(),
+    done: v.boolean(),
+    freq: v.string(),
+    seriesId: v.string(),
+    energy: v.optional(v.number()),
+    flexible: v.optional(v.boolean()),
+  }).index("by_user_date", ["userId", "date"]),
+
+  shares: defineTable({
+    ownerId: v.id("users"),
+    token: v.string(),
+    status: v.union(v.literal("pending"), v.literal("accepted")),
+    acceptedBy: v.optional(v.id("users")),
+    hidePhase: v.optional(v.boolean()),
+  })
+    .index("by_token", ["token"])
+    .index("by_owner", ["ownerId"])
+    .index("by_accepted", ["acceptedBy"]),
+
+  feedback: defineTable({
+    userId: v.optional(v.id("users")),
+    message: v.string(),
+    category: v.string(),
+  }),
+
+  pushSubscriptions: defineTable({
+    userId: v.id("users"),
+    endpoint: v.string(),
+    keys: v.optional(v.string()),
+  }).index("by_user", ["userId"]),
+
+  adjustments: defineTable({
+    userId: v.id("users"),
+    at: v.number(),
+    note: v.string(),
+  }).index("by_user", ["userId"]),
+
+  profiles: defineTable({
+    userId: v.id("users"),
+    persona,
+    lastPeriodStart: v.optional(v.string()),
+    cycleLength: v.optional(v.number()),
+    periodLength: v.optional(v.number()),
+    lutealLength: v.optional(v.number()),
+    packLength: v.optional(v.number()),
+    feedToken: v.optional(v.string()),
+    diet: v.optional(v.string()),
+    movement: v.optional(v.string()),
+    referral: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    irregular: v.optional(v.boolean()),
+    endo: v.optional(
+      v.union(v.literal("none"), v.literal("suspected"), v.literal("diagnosed")),
+    ),
+  }).index("by_user", ["userId"]).index("by_feed", ["feedToken"]),
 });

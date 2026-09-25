@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Fravia",
+    name: "Fravia – Dein Zykluskalender",
     short_name: "Fravia",
-    description: "Ein Kalender, der den Tag nach dir schneidet.",
+    description: "für dich, im Einklang mit deinem Zyklus.",
     start_url: "/",
     scope: "/",
     display: "standalone",

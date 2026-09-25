@@ -9,6 +9,7 @@
  */
 
 import type * as journal from "../journal.js";
+import type * as life from "../life.js";
 import type * as users from "../users.js";
 
 import type {
@@ -19,6 +20,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   journal: typeof journal;
+  life: typeof life;
   users: typeof users;
 }>;
 

@@ -52,6 +52,7 @@ export const saveProfile = mutation({
     periodLength: v.optional(v.number()),
     lutealLength: v.optional(v.number()),
     packLength: v.optional(v.number()),
+    irregular: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -78,7 +79,42 @@ export const saveProfile = mutation({
     if (args.periodLength) doc.periodLength = args.periodLength;
     if (args.lutealLength) doc.lutealLength = args.lutealLength;
     if (args.packLength) doc.packLength = args.packLength;
-    const id = await ctx.db.insert("profiles", doc);
+    const changed =
+      existing &&
+      (existing.cycleLength !== doc.cycleLength ||
+        existing.periodLength !== doc.periodLength ||
+        existing.lutealLength !== doc.lutealLength ||
+        existing.packLength !== doc.packLength ||
+        existing.persona !== doc.persona);
+    if (changed) {
+      const bits = [
+        doc.cycleLength ? `Zyklus ${doc.cycleLength}` : "",
+        doc.periodLength ? `Periode ${doc.periodLength}` : "",
+        doc.lutealLength ? `Luteal ${doc.lutealLength}` : "",
+        doc.packLength ? `Pack ${doc.packLength}` : "",
+      ].filter(Boolean);
+      await ctx.db.insert("adjustments", {
+        userId: user._id,
+        at: Date.now(),
+        note: bits.length
+          ? `Ich rechne jetzt mit ${bits.join(", ")}.`
+          : "Ich habe die Ausrichtung angepasst.",
+      });
+    }
+    const id = await ctx.db.insert("profiles", {
+      ...doc,
+      ...(args.irregular !== undefined
+        ? { irregular: args.irregular }
+        : existing?.irregular
+          ? { irregular: existing.irregular }
+          : {}),
+      ...(existing?.feedToken ? { feedToken: existing.feedToken } : {}),
+      ...(existing?.diet ? { diet: existing.diet } : {}),
+      ...(existing?.movement ? { movement: existing.movement } : {}),
+      ...(existing?.referral ? { referral: existing.referral } : {}),
+      ...(existing?.displayName ? { displayName: existing.displayName } : {}),
+      ...(existing?.endo ? { endo: existing.endo } : {}),
+    });
     return await ctx.db.get(id);
   },
 });
@@ -127,6 +163,8 @@ export const saveDay = mutation({
     sleep: v.optional(
       v.union(v.literal("steady"), v.literal("broken"), v.literal("short")),
     ),
+    symptoms: v.optional(v.array(v.string())),
+    ovulation: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -152,6 +190,8 @@ export const saveDay = mutation({
       ...(args.mood ? { mood: args.mood } : {}),
       ...(args.heat ? { heat: args.heat } : {}),
       ...(args.sleep ? { sleep: args.sleep } : {}),
+      ...(args.symptoms ? { symptoms: args.symptoms.slice(0, 8) } : {}),
+      ...(args.ovulation !== undefined ? { ovulation: args.ovulation } : {}),
     });
   },
 });

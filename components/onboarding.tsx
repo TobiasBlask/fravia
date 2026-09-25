@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLang } from "@/components/lang";
 import type { Persona, Profile } from "@/lib/types";
 import { iso } from "@/lib/dates";
 import { PERSONAS } from "@/lib/voice";
@@ -14,12 +15,12 @@ type Draft = {
   packLength: string;
 };
 
-const QUESTIONS: Record<Persona, string> = {
-  rhythm: "Wann hat deine letzte Blutung angefangen?",
-  pill: "Wann hat die Blutung angefangen, die du wirklich hast?",
-  pain: "Wann hat die letzte Blutung angefangen?",
-  menopause: "Wann war die letzte Blutung, wenn du sie noch weißt?",
-};
+const QUESTION_KEY = {
+  rhythm: "questionRhythm",
+  pill: "questionPill",
+  pain: "questionPain",
+  menopause: "questionMeno",
+} as const;
 
 export function Onboarding({
   initial,
@@ -48,6 +49,7 @@ export function Onboarding({
     packLength: String(initial?.packLength ?? 28),
   });
   const [localError, setLocalError] = useState<string | null>(null);
+  const { t } = useLang();
   const today = iso(new Date());
 
   function choose(persona: Persona) {
@@ -61,11 +63,11 @@ export function Onboarding({
     const persona = draft.persona;
     const date = skipDate ? "" : draft.lastPeriodStart;
     if (persona !== "menopause" && !date) {
-      setLocalError("Das Datum fehlt noch.");
+      setLocalError(t("dateMissing"));
       return;
     }
     if (date && date > today) {
-      setLocalError("Das Datum liegt noch vor dir.");
+      setLocalError(t("dateFuture"));
       return;
     }
     const period = Number(draft.periodLength);
@@ -75,7 +77,7 @@ export function Onboarding({
 
     if (persona === "rhythm") {
       if (cycle < 21 || cycle > 45 || period < 2 || period > 10 || luteal < 8 || luteal > 20 || period >= cycle) {
-        setLocalError("Diese Längen passen nicht in einen Zyklus.");
+        setLocalError(t("lengths"));
         return;
       }
       onSave({
@@ -89,7 +91,7 @@ export function Onboarding({
     }
     if (persona === "pill") {
       if (pack < 21 || pack > 35 || period < 1 || period > 10 || period >= pack) {
-        setLocalError("Blutung und Packlänge passen so nicht zusammen.");
+        setLocalError(t("lengths"));
         return;
       }
       onSave({
@@ -102,7 +104,7 @@ export function Onboarding({
     }
     if (persona === "pain") {
       if (cycle < 21 || cycle > 45 || period < 2 || period > 10 || period >= cycle) {
-        setLocalError("Ungefähr reicht. So ungefähr ist es nicht.");
+        setLocalError(t("lengths"));
         return;
       }
       onSave({
@@ -127,13 +129,13 @@ export function Onboarding({
         <div>
           {allowCancel ? (
             <button type="button" className="min-h-12 text-sm" onClick={onCancel}>
-              Zurück zum Kalender
+              {t("backCal")}
             </button>
           ) : (
             <p className="text-xs uppercase tracking-[0.18em]">Fravia</p>
           )}
           <h1 className="mt-8 font-serif text-4xl leading-[1.05] min-[900px]:text-6xl">
-            Wofür soll dieser Kalender da sein?
+            {t("meet")}
           </h1>
         </div>
         <div className="mt-8 grid gap-3 min-[900px]:mt-0 min-[900px]:grid-cols-2">
@@ -170,24 +172,28 @@ export function Onboarding({
           className="min-h-12 text-sm"
           onClick={() => setStep("persona")}
         >
-          Andere Ausrichtung
+          {t("other")}
         </button>
         <p className="mt-6 text-xs uppercase tracking-[0.16em]">
           {PERSONAS.find((item) => item.id === persona)?.title}
         </p>
         <h1 className="mt-4 font-serif text-4xl leading-[1.05] min-[900px]:text-6xl">
-          {QUESTIONS[persona]}
+          {t(QUESTION_KEY[persona])}
         </h1>
         {persona === "pain" ? (
           <p className="mt-6 max-w-md text-base leading-snug">
-            Nur als Rahmen. Der Tag richtet sich nach dem Schmerz.
+            {t("painFrame")}
           </p>
         ) : null}
         {persona === "menopause" ? (
           <p className="mt-6 max-w-md text-base leading-snug">
-            Daraus rechnen wir keinen Zyklus.
+            {t("menoFrame")}
           </p>
         ) : null}
+        {persona === "pill" ? (
+          <p className="mt-6 max-w-md text-base leading-snug">{t("pillWelcome")}</p>
+        ) : null}
+        <p className="mt-4 max-w-md text-sm">{t("later")}</p>
       </div>
       <form
         className="mt-8 flex flex-1 flex-col min-[900px]:mt-0"
@@ -197,7 +203,7 @@ export function Onboarding({
         }}
       >
         <label className="block">
-          <span className="sr-only">{QUESTIONS[persona]}</span>
+          <span className="sr-only">{t(QUESTION_KEY[persona])}</span>
           <input
             type="date"
             max={today}
@@ -213,8 +219,8 @@ export function Onboarding({
         </label>
         {persona === "rhythm" || persona === "pain" ? (
           <NumberField
-            label={persona === "pain" ? "Zykluslänge, ungefähr" : "Zykluslänge"}
-            suffix="Tage"
+            label={persona === "pain" ? t("cycleApprox") : t("cycleLen")}
+            suffix={t("days")}
             value={draft.cycleLength}
             onChange={(cycleLength) =>
               setDraft((current) => ({ ...current, cycleLength }))
@@ -223,12 +229,8 @@ export function Onboarding({
         ) : null}
         {persona !== "menopause" ? (
           <NumberField
-            label={
-              persona === "pain"
-                ? "Wie viele Tage blutet es meistens?"
-                : "Wie viele Tage blutet es?"
-            }
-            suffix="Tage"
+            label={persona === "pain" ? t("bleedDaysPain") : t("bleedDays")}
+            suffix={t("days")}
             value={draft.periodLength}
             onChange={(periodLength) =>
               setDraft((current) => ({ ...current, periodLength }))
@@ -237,9 +239,9 @@ export function Onboarding({
         ) : null}
         {persona === "rhythm" ? (
           <NumberField
-            label="Lutealphase"
-            hint="Tage vom Eisprung bis zur nächsten Blutung."
-            suffix="Tage"
+            label={t("luteal")}
+            hint={t("lutealHint")}
+            suffix={t("days")}
             value={draft.lutealLength}
             onChange={(lutealLength) =>
               setDraft((current) => ({ ...current, lutealLength }))
@@ -248,8 +250,8 @@ export function Onboarding({
         ) : null}
         {persona === "pill" ? (
           <NumberField
-            label="Wie lang ist ein Pack, Pause inklusive?"
-            suffix="Tage"
+            label={t("pack")}
+            suffix={t("days")}
             value={draft.packLength}
             onChange={(packLength) =>
               setDraft((current) => ({ ...current, packLength }))
@@ -263,7 +265,7 @@ export function Onboarding({
             disabled={busy}
             className="min-h-14 bg-ink text-paper disabled:opacity-50"
           >
-            Stimmt so
+            {t("know")}
           </button>
           {persona === "menopause" ? (
             <button
@@ -272,7 +274,7 @@ export function Onboarding({
               className="min-h-12 text-sm"
               onClick={() => save(true)}
             >
-              Weiß ich nicht
+              {t("unsure")}
             </button>
           ) : null}
         </div>

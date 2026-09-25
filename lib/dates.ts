@@ -52,27 +52,51 @@ export function monthWeeks(cursor: Date) {
   return weeks;
 }
 
-export function formatMonth(date: Date) {
-  return new Intl.DateTimeFormat("de-DE", {
+const INTL: Record<string, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  es: "es-ES",
+  fr: "fr-FR",
+};
+
+function loc(code?: string) {
+  return INTL[code ?? "de"] ?? "de-DE";
+}
+
+export function addDays(date: Date, count: number) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + count);
+}
+
+export function startOfWeek(date: Date) {
+  return addDays(date, -((date.getDay() + 6) % 7));
+}
+
+export function weekDates(cursor: Date) {
+  const start = startOfWeek(cursor);
+  return Array.from({ length: 7 }, (_, index) => addDays(start, index));
+}
+
+export function formatMonth(date: Date, code?: string) {
+  return new Intl.DateTimeFormat(loc(code), {
     month: "long",
     year: "numeric",
   }).format(date);
 }
 
-export function formatMonthName(date: Date) {
-  return new Intl.DateTimeFormat("de-DE", { month: "long" }).format(date);
+export function formatMonthName(date: Date, code?: string) {
+  return new Intl.DateTimeFormat(loc(code), { month: "long" }).format(date);
 }
 
-export function formatLong(date: Date) {
-  return new Intl.DateTimeFormat("de-DE", {
+export function formatLong(date: Date, code?: string) {
+  return new Intl.DateTimeFormat(loc(code), {
     weekday: "long",
     day: "numeric",
     month: "long",
   }).format(date);
 }
 
-export function formatWeekday(date: Date) {
-  return new Intl.DateTimeFormat("de-DE", { weekday: "short" })
+export function formatWeekday(date: Date, code?: string) {
+  return new Intl.DateTimeFormat(loc(code), { weekday: "short" })
     .format(date)
     .replace(".", "");
 }

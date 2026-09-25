@@ -13,6 +13,49 @@ export type Profile = {
   periodLength?: number;
   lutealLength?: number;
   packLength?: number;
+  feedToken?: string;
+  diet?: string;
+  movement?: string;
+  referral?: string;
+  displayName?: string;
+  irregular?: boolean;
+  endo?: "none" | "suspected" | "diagnosed";
+};
+
+export type EventKind = "termin" | "mahlzeit" | "sport" | "geburtstag";
+export type SeriesFreq =
+  | "none"
+  | "daily"
+  | "weekdays"
+  | "weekdays-sat"
+  | "weekly"
+  | "monthly"
+  | "quarterly"
+  | "halfyearly"
+  | "yearly";
+
+export type DayEvent = {
+  id: string;
+  title: string;
+  kind: EventKind;
+  date: string;
+  time?: string;
+  note?: string;
+  freq: string;
+  seriesId: string;
+  shared?: boolean;
+};
+
+export type DayTodo = {
+  id: string;
+  title: string;
+  date: string;
+  done: boolean;
+  freq: string;
+  seriesId: string;
+  energy?: number;
+  flexible?: boolean;
+  shared?: boolean;
 };
 
 export type DayLog = {
@@ -24,6 +67,8 @@ export type DayLog = {
   mood?: Mood;
   heat?: Heat;
   sleep?: Sleep;
+  symptoms?: string[];
+  ovulation?: boolean;
 };
 
 export type TintKey =

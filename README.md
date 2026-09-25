@@ -1,8 +1,8 @@
 # Fravia
 
-Fravia ist ein Kalender, der den Tag nach dir schneidet. Nach der Anmeldung wählst du eine Ausrichtung: Im Rhythmus, Auf der Pille, Mit Schmerz oder Wechseljahre. Danach zeigt der Monat, wofür der Tag da ist, und du legst in ein paar Taps ab, wie er war.
+Fravia plant deine Woche im Einklang mit deinem Zyklus. Nach der Anmeldung – oder im Gast-Modus, nur auf diesem Gerät – sagst du, wofür der Kalender da ist: Im Rhythmus, Auf der Pille, Mit Schmerz oder Wechseljahre. Danach zeigt der Monat die Phase, und du trägst den Tag ein: Energie, Beschwerden, Termine, Aufgaben, Essen, Bewegung.
 
-Die Oberfläche ist Deutsch und spricht dich mit du an.
+Deutsch ist die Sprache, mit der ich dich anspreche. Englisch, Spanisch und Französisch stellst du in den Einstellungen um.
 
 ## Lokal starten
 
@@ -33,6 +33,7 @@ Auf dem Convex-Deployment:
 Nur für das Deploy, nicht zur Laufzeit der App:
 
 - `CONVEX_DEPLOY_KEY`
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (optional, für Erinnerungen; ohne Schlüssel bleibt der Versand aus)
 
 ```bash
 npx convex env set CLERK_FRONTEND_API_URL <issuer>

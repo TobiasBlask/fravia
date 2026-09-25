@@ -1,41 +1,39 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLang } from "@/components/lang";
+import type { CopyKey } from "@/lib/copy";
 import { formatLong, parseISODate } from "@/lib/dates";
-import type { Bleeding, DayLog, Heat, Mood, Pain, Persona, Sleep } from "@/lib/types";
+import type { Bleeding, DayLog, Heat, Mood, Pain, Sleep } from "@/lib/types";
 import { dayMark } from "@/lib/voice";
 import type { Profile } from "@/lib/types";
 
-const BLEEDING: Array<{ id: Bleeding; label: string }> = [
-  { id: "none", label: "keine" },
-  { id: "light", label: "leicht" },
-  { id: "medium", label: "mittel" },
-  { id: "heavy", label: "stark" },
+const BLEEDING: Bleeding[] = ["none", "light", "medium", "heavy"];
+const SYMPTOMS = ["cramp", "head", "breast", "skin", "tired", "appetite"] as const;
+
+const PAIN: Array<{ id: Pain; label: CopyKey }> = [
+  { id: "none", label: "painNone" },
+  { id: "light", label: "painLight" },
+  { id: "strong", label: "painStrong" },
+  { id: "out", label: "painOut" },
 ];
 
-const PAIN: Array<{ id: Pain; label: string }> = [
-  { id: "none", label: "keiner" },
-  { id: "light", label: "spürbar" },
-  { id: "strong", label: "stark" },
-  { id: "out", label: "geht nicht" },
+const MOOD: Array<{ id: Mood; label: CopyKey }> = [
+  { id: "even", label: "moodEven" },
+  { id: "thin", label: "moodThin" },
+  { id: "raw", label: "moodRaw" },
 ];
 
-const MOOD: Array<{ id: Mood; label: string }> = [
-  { id: "even", label: "tragbar" },
-  { id: "thin", label: "dünn" },
-  { id: "raw", label: "roh" },
+const HEAT: Array<{ id: Heat; label: CopyKey }> = [
+  { id: "none", label: "heatNone" },
+  { id: "warm", label: "heatWarm" },
+  { id: "hot", label: "heatHot" },
 ];
 
-const HEAT: Array<{ id: Heat; label: string }> = [
-  { id: "none", label: "keine" },
-  { id: "warm", label: "warm" },
-  { id: "hot", label: "heiß" },
-];
-
-const SLEEP: Array<{ id: Sleep; label: string }> = [
-  { id: "steady", label: "ruhig" },
-  { id: "broken", label: "gebrochen" },
-  { id: "short", label: "kurz" },
+const SLEEP: Array<{ id: Sleep; label: CopyKey }> = [
+  { id: "steady", label: "sleepSteady" },
+  { id: "broken", label: "sleepBroken" },
+  { id: "short", label: "sleepShort" },
 ];
 
 export function DayCheckin({
@@ -62,7 +60,10 @@ export function DayCheckin({
   const [mood, setMood] = useState<Mood | undefined>(existing?.mood);
   const [heat, setHeat] = useState<Heat | undefined>(existing?.heat);
   const [sleep, setSleep] = useState<Sleep | undefined>(existing?.sleep);
+  const [symptoms, setSymptoms] = useState<string[]>(existing?.symptoms ?? []);
+  const [ovulation, setOvulation] = useState(Boolean(existing?.ovulation));
   const [hint, setHint] = useState<string | null>(null);
+  const { lang, t } = useLang();
 
   useEffect(() => {
     setBleeding(existing?.bleeding);
@@ -72,31 +73,24 @@ export function DayCheckin({
     setMood(existing?.mood);
     setHeat(existing?.heat);
     setSleep(existing?.sleep);
+    setSymptoms(existing?.symptoms ?? []);
+    setOvulation(Boolean(existing?.ovulation));
     setHint(null);
   }, [date, existing]);
 
   const persona = profile.persona;
   const mark = dayMark(profile, parseISODate(date), existing);
-  const notePrompt =
-    persona === "pain"
-      ? "Was heute ging. Oder nicht."
-      : persona === "menopause"
-        ? "Ein Satz zum Tag, wenn einer bleibt."
-        : persona === "pill"
-          ? "Stimmung in einem Satz, wenn du willst."
-          : "Ein Satz, wenn einer bleibt.";
-
   function save() {
     if ((persona === "rhythm" || persona === "pill" || persona === "pain") && !energy) {
-      setHint("Noch die Energie.");
+      setHint(t("needEnergy"));
       return;
     }
     if (persona === "pain" && !pain) {
-      setHint("Tippe den Schmerz, auch wenn keiner da ist.");
+      setHint(t("needPain"));
       return;
     }
     if (persona === "menopause" && !sleep && !heat && !mood) {
-      setHint("Tippe, wie der Tag sich anfühlt.");
+      setHint(t("needFeel"));
       return;
     }
     onSave({
@@ -108,6 +102,8 @@ export function DayCheckin({
       ...(mood ? { mood } : {}),
       ...(heat ? { heat } : {}),
       ...(sleep ? { sleep } : {}),
+      ...(symptoms.length ? { symptoms } : {}),
+      ...(persona === "rhythm" ? { ovulation } : {}),
     });
   }
 
@@ -119,48 +115,73 @@ export function DayCheckin({
             {mark.band || "Dieser Tag"}
           </p>
           <h2 className="mt-2 font-serif text-3xl leading-none min-[900px]:text-4xl">
-            {formatLong(parseISODate(date))}
+            {formatLong(parseISODate(date), lang)}
           </h2>
         </div>
         {fullscreen ? (
           <button type="button" className="min-h-12 shrink-0 text-sm" onClick={onClose}>
-            Zurück
+            {t("back")}
           </button>
         ) : null}
       </div>
       <div className="mt-8 grid gap-6">
         {persona === "pain" ? (
-          <Choices label="Schmerz" value={pain} options={PAIN} onChange={setPain} />
+          <Choices label={t("pain")} value={pain} options={PAIN.map((item) => ({ id: item.id, label: t(item.label) }))} onChange={setPain} />
         ) : null}
         {persona === "menopause" ? (
           <>
-            <Choices label="Schlaf" value={sleep} options={SLEEP} onChange={setSleep} />
-            <Choices label="Hitze" value={heat} options={HEAT} onChange={setHeat} />
-            <Choices label="Stimmung" value={mood} options={MOOD} onChange={setMood} />
+            <Choices label={t("sleep")} value={sleep} options={SLEEP.map((item) => ({ id: item.id, label: t(item.label) }))} onChange={setSleep} />
+            <Choices label={t("heat")} value={heat} options={HEAT.map((item) => ({ id: item.id, label: t(item.label) }))} onChange={setHeat} />
+            <Choices label={t("mood")} value={mood} options={MOOD.map((item) => ({ id: item.id, label: t(item.label) }))} onChange={setMood} />
           </>
         ) : null}
         {persona !== "menopause" ? (
           <Choices
-            label="Blutung"
+            label={t("bleed")}
             value={bleeding}
-            options={BLEEDING}
+            options={BLEEDING.map((id) => ({ id, label: t(id === "none" ? "none" : id === "light" ? "light" : id === "medium" ? "medium" : "heavy") }))}
             onChange={setBleeding}
           />
         ) : (
           <Choices
-            label="Blutung, falls sie da ist"
+            label={t("bleedMaybe")}
             value={bleeding}
-            options={BLEEDING}
+            options={BLEEDING.map((id) => ({ id, label: t(id === "none" ? "none" : id === "light" ? "light" : id === "medium" ? "medium" : "heavy") }))}
             onChange={setBleeding}
           />
         )}
         {persona === "pill" ? (
-          <Choices label="Stimmung" value={mood} options={MOOD} onChange={setMood} />
+          <Choices label={t("mood")} value={mood} options={MOOD.map((item) => ({ id: item.id, label: t(item.label) }))} onChange={setMood} />
         ) : null}
+        {persona === "rhythm" ? (
+          <button type="button" aria-pressed={ovulation} onClick={() => setOvulation((value) => !value)} className={`min-h-12 ${ovulation ? "bg-ink text-paper" : "ring-1 ring-ink/20"}`}>
+            {t("ovulation")}
+          </button>
+        ) : null}
+        <fieldset>
+          <legend className="mb-2 text-[11px] uppercase tracking-[0.16em]">{t("symptoms")}</legend>
+          <div className="flex flex-wrap gap-2">
+            {SYMPTOMS.map((id) => {
+              const on = symptoms.includes(id);
+              const label = id === "cramp" ? t("symCramp") : id === "head" ? t("symHead") : id === "breast" ? t("symBreast") : id === "skin" ? t("symSkin") : id === "tired" ? t("symTired") : t("symAppetite");
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setSymptoms((current) => on ? current.filter((item) => item !== id) : [...current, id])}
+                  className={`min-h-10 px-3 text-sm ${on ? "bg-ink text-paper" : "ring-1 ring-ink/20"}`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
         {persona !== "menopause" ? (
           <fieldset>
             <legend className="mb-2 text-[11px] uppercase tracking-[0.16em]">
-              Energie
+              {t("energy")}
             </legend>
             <div className="grid grid-cols-5 gap-2">
               {[1, 2, 3, 4, 5].map((value) => (
@@ -176,14 +197,14 @@ export function DayCheckin({
               ))}
             </div>
             <div className="mt-2 flex justify-between text-[11px] uppercase tracking-[0.14em] text-ink/60">
-              <span>wenig</span>
-              <span>viel</span>
+              <span>{t("low")}</span>
+              <span>{t("high")}</span>
             </div>
           </fieldset>
         ) : null}
         <label className="block">
           <span className="mb-2 block text-[11px] uppercase tracking-[0.16em]">
-            {notePrompt}
+            {t("note")}
           </span>
           <textarea
             value={note}
@@ -202,7 +223,7 @@ export function DayCheckin({
           onClick={save}
           className="min-h-14 w-full bg-ink text-paper disabled:opacity-50"
         >
-          {busy ? "Wird abgelegt" : "Ablegen"}
+          {busy ? t("saving") : t("save")}
         </button>
       </div>
     </section>
