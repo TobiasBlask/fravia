@@ -16,6 +16,7 @@ export function TimeGrid({
   profile,
   logs,
   today,
+  showHours = true,
   onSlot,
   onOpen,
   onMove,
@@ -27,6 +28,7 @@ export function TimeGrid({
   profile: Profile;
   logs: Record<string, DayLog>;
   today: string;
+  showHours?: boolean;
   onSlot: (date: string, time: string) => void;
   onOpen: (event: DayEvent) => void;
   onMove: (event: DayEvent, date: string, time: string) => void;
@@ -42,15 +44,61 @@ export function TimeGrid({
   const moved = useRef(false);
   const single = days.length === 1;
 
+  const dayKey = days.map((date) => iso(date)).join();
+  const focusKey = events
+    .filter((event) => event.time && dayKey.includes(event.date))
+    .map((event) => `${event.id}:${event.date}:${event.time}`)
+    .join("|");
+
   useEffect(() => {
-    const node = scroller.current?.querySelector("[data-now='true']");
-    node?.scrollIntoView({ block: "center" });
-  }, [days.length, today]);
+    const root = scroller.current;
+    if (!root || !showHours) return;
+    const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+    const visible = events.filter((event) => event.time && dayKey.includes(event.date));
+    const upcoming = visible
+      .filter((event) => event.date > today || (event.date === today && minutesOf(event.time ?? "00:00") >= nowMinutes - 30))
+      .sort((a, b) => (a.date === b.date ? minutesOf(a.time ?? "00:00") - minutesOf(b.time ?? "00:00") : a.date.localeCompare(b.date)));
+    const latest = [...visible].sort((a, b) => (a.date === b.date ? minutesOf(b.time ?? "00:00") - minutesOf(a.time ?? "00:00") : b.date.localeCompare(a.date)))[0];
+    const target = upcoming[0] ?? latest;
+    const node = target
+      ? root.querySelector<HTMLElement>(`[data-event-id="${CSS.escape(target.id)}"]`)
+      : root.querySelector<HTMLElement>("[data-now='true']");
+    if (!node) return;
+    const delta = node.getBoundingClientRect().top - root.getBoundingClientRect().top;
+    if (root.scrollHeight > root.clientHeight + 24) {
+      root.scrollTop += delta - 8;
+      return;
+    }
+    window.scrollTo({ top: window.scrollY + node.getBoundingClientRect().top - 120 });
+  }, [dayKey, focusKey, showHours, today, events]);
 
   function timeAt(clientY: number, column: HTMLElement) {
     const rect = column.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
     return clockOf(snapQuarter(bounds.start + ratio * total));
+  }
+
+  if (!showHours) {
+    return (
+      <div className="bg-paper">
+        {days.map((date) => (
+          <DayHead
+            key={iso(date)}
+            date={date}
+            profile={profile}
+            log={logs[iso(date)]}
+            today={today}
+            lang={lang}
+            todayWord={t("todayWord")}
+            large={days.length === 1}
+            events={events}
+            todos={todos}
+            onOpen={onOpen}
+            onToggleTodo={onToggleTodo}
+          />
+        ))}
+      </div>
+    );
   }
 
   return (
@@ -127,6 +175,7 @@ export function TimeGrid({
                     key={event.id}
                     type="button"
                     data-event="true"
+                    data-event-id={event.id}
                     className="absolute z-[1] min-h-11 overflow-hidden rounded-[12px] px-2 py-1 text-left text-sm leading-snug text-paper transition-opacity duration-150"
                     style={{
                       top: `${top}%`,

@@ -2,7 +2,7 @@
 
 import { useClerk } from "@clerk/nextjs";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { DayBoard } from "@/components/day-board";
 import { DayCheckin } from "@/components/day-checkin";
 import { EventSheet } from "@/components/event-sheet";
@@ -14,8 +14,8 @@ import { VoiceBox } from "@/components/voice-box";
 import { Wash } from "@/components/wash";
 import { Workbook } from "@/components/workbook";
 import { YearStage } from "@/components/year-stage";
-import { clockOf, dueReminders, endOf, minutesOf, reminderLine } from "@/lib/clock";
-import { addDays, iso, parseISODate, startOfMonth, weekDates } from "@/lib/dates";
+import { clockOf, dueReminders, endOf, minutesOf, nextQuarter, reminderLine } from "@/lib/clock";
+import { addDays, formatWeekday, iso, parseISODate, startOfMonth, weekDates } from "@/lib/dates";
 import type { DayEvent } from "@/lib/types";
 import { stanceFor, tintHex } from "@/lib/voice";
 
@@ -23,7 +23,7 @@ const VIEWS = ["day", "week", "month", "year"] as const;
 
 export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
   const { signOut } = useClerk();
-  const { say, t } = useLang();
+  const { lang, say, t } = useLang();
   const profile = journal.profile;
   const today = useMemo(() => new Date(), []);
   const todayIso = iso(today);
@@ -36,6 +36,9 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
   const [query, setQuery] = useState("");
   const [hiddenReminders, setHiddenReminders] = useState<string[]>([]);
   const [editor, setEditor] = useState<{ event?: DayEvent; date: string; time?: string } | null>(null);
+  const [quick, setQuick] = useState<{ date: string; time: string } | null>(null);
+  const [quickTitle, setQuickTitle] = useState("");
+  const stageRef = useRef<HTMLDivElement>(null);
   const view = picked ?? (wide ? "week" : "day");
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -59,6 +62,38 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
     setPicked(window.matchMedia("(min-width: 900px)").matches ? "week" : "day");
   }, [journal.focus]);
 
+  useEffect(() => {
+    const node = stageRef.current;
+    if (!node) return;
+    let startX = 0;
+    let startY = 0;
+    let tracking = false;
+    function down(event: PointerEvent) {
+      if (window.innerWidth >= 900) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-event], input, textarea, button, a, select")) return;
+      tracking = true;
+      startX = event.clientX;
+      startY = event.clientY;
+    }
+    function up(event: PointerEvent) {
+      if (!tracking) return;
+      tracking = false;
+      const dx = event.clientX - startX;
+      const dy = event.clientY - startY;
+      if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy)) return;
+      const next = iso(addDays(parseISODate(selected), dx < 0 ? 1 : -1));
+      setSelected(next);
+      setCursor(parseISODate(next));
+    }
+    node.addEventListener("pointerdown", down);
+    node.addEventListener("pointerup", up);
+    return () => {
+      node.removeEventListener("pointerdown", down);
+      node.removeEventListener("pointerup", up);
+    };
+  }, [profile, selected]);
+
   if (!profile) return null;
   const stance = say(stanceFor(profile, today, journal.logs[todayIso]));
   const color = tintHex(stance.tint);
@@ -74,6 +109,32 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
     setSelected(date);
     setCursor(parseISODate(date));
     setPicked(window.matchMedia("(min-width: 900px)").matches ? "week" : "day");
+    setTalk(false);
+  }
+
+  function openQuick(date: string, time?: string) {
+    setEditor(null);
+    setQuickTitle("");
+    setQuick({ date, time: time ?? nextQuarter() });
+  }
+
+  async function commitQuick(event: FormEvent) {
+    event.preventDefault();
+    if (!quick || !quickTitle.trim()) return;
+    const start = quick.time;
+    const end = clockOf(Math.min(minutesOf(start) + 60, 23 * 60 + 59));
+    await journal.addEvent({
+      title: quickTitle.trim(),
+      kind: "termin",
+      date: quick.date,
+      time: start,
+      end,
+      freq: "none",
+    });
+    setSelected(quick.date);
+    setCursor(parseISODate(quick.date));
+    setQuick(null);
+    setQuickTitle("");
   }
 
   function jumpToday() {
@@ -89,6 +150,25 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
     : [];
   const anchor = parseISODate(selected);
   const gridDays = view === "week" ? weekDates(anchor) : [anchor];
+  const rangeKeys = new Set(gridDays.map((date) => iso(date)));
+  const inRange = journal.events.filter((event) => rangeKeys.has(event.date));
+  const todosInRange = journal.todos.filter((todo) => rangeKeys.has(todo.date));
+  const emptyRange = (view === "day" || view === "week") && inRange.length === 0 && todosInRange.length === 0;
+  const timedHere = inRange.some((event) => event.time);
+  const nowMs = today.getTime();
+  const upcoming = !timedHere && (view === "day" || view === "week")
+    ? journal.events
+        .filter((event) => {
+          if (!event.time) return false;
+          const [hour, minute] = event.time.split(":").map(Number);
+          const when = parseISODate(event.date);
+          when.setHours(hour ?? 0, minute ?? 0, 0, 0);
+          const floor = Math.max(nowMs - 15 * 60_000, parseISODate(selected).getTime());
+          return when.getTime() >= floor;
+        })
+        .sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? ""))
+        .slice(0, 3)
+    : [];
 
   return (
     <>
@@ -104,7 +184,17 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
           </div>
         ) : null}
         <header className="flex flex-col gap-3 min-[900px]:flex-row min-[900px]:items-center min-[900px]:justify-between">
-          <p className="font-serif text-3xl leading-none min-[900px]:text-4xl">Fravia</p>
+          <div className="flex items-center justify-between gap-4">
+            <p className="font-serif text-3xl leading-none min-[900px]:text-4xl">Fravia</p>
+            <button
+              type="button"
+              aria-label="Eintragen"
+              className="hidden h-12 w-12 place-items-center rounded-full bg-ink font-sans text-2xl leading-none text-paper transition-opacity duration-150 min-[900px]:grid"
+              onClick={() => openQuick(selected)}
+            >
+              +
+            </button>
+          </div>
           <div className="flex rounded-[12px] border border-ink/20 p-1" role="tablist" aria-label="Ansicht">
             {VIEWS.map((item) => (
               <button
@@ -121,7 +211,8 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
           </div>
         </header>
         <div className="mt-2 flex flex-wrap items-center gap-x-4">
-          <button type="button" className="min-h-11 text-sm min-[900px]:hidden" onClick={() => setSheet(true)}>{t("checkin")}</button>
+          <button type="button" className="min-h-11 text-sm" onClick={() => setSheet(true)}>{t("checkin")}</button>
+          <button type="button" className="hidden min-h-11 text-sm min-[900px]:inline" onClick={() => setTalk(true)}>Dialog</button>
           <button type="button" className="min-h-11 text-sm" onClick={() => journal.setRevising(true)}>{t("revise")}</button>
           <Link href="/settings" className="inline-flex min-h-11 items-center text-sm">{t("settings")}</Link>
           {journal.guestMode ? null : (
@@ -129,47 +220,14 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
           )}
         </div>
         {journal.guestMode ? <p className="mt-2 text-sm">{t("guestNote")}</p> : null}
-        <div className="mt-6 min-[900px]:grid min-[900px]:grid-cols-[minmax(240px,300px)_minmax(0,1fr)] min-[900px]:items-start min-[900px]:gap-x-8">
-          <aside className="hidden min-[900px]:block">
-            <Workbook journal={journal} today={today} onPlaced={placed} />
-            <details className="mt-10">
-              <summary className="min-h-11 cursor-pointer text-sm">{t("checkin")}</summary>
-              <div className="mt-6 bg-paper">
-                <p className="font-serif text-4xl leading-none" style={{ color }}>{stance.kicker}</p>
-                {stance.detail ? (
-                  <p className={stance.detailTone === "strong" ? "mt-3 font-serif text-2xl" : "mt-3 max-w-sm text-base leading-snug"}>
-                    {stance.detail}
-                  </p>
-                ) : null}
-                <p className="mt-4 font-serif text-xl leading-tight">{stance.lines[0]}</p>
-                <p className="mt-1 font-serif text-xl leading-tight">{stance.lines[1]}</p>
-                <div className="mt-6 grid gap-4">
-                  <div>
-                    <p className="text-sm text-ink/60">{t("food")}</p>
-                    <p className="mt-1 text-base leading-snug">{stance.food}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-ink/60">{t("move")}</p>
-                    <p className="mt-1 text-base leading-snug">{stance.move}</p>
-                  </div>
-                </div>
-                <div className="mt-8">
-                  <DayCheckin
-                    profile={profile}
-                    date={openDate}
-                    existing={journal.logs[openDate]}
-                    busy={journal.busy}
-                    fullscreen={false}
-                    onClose={() => undefined}
-                    onSave={(log) => void journal.saveDay(log)}
-                  />
-                  <DayBoard date={openDate} journal={journal} />
-                  <VoiceBox date={openDate} existing={journal.logs[openDate]} journal={journal} />
-                </div>
-              </div>
-            </details>
-          </aside>
-          <div className="min-[900px]:flex min-[900px]:h-[calc(100dvh-7.5rem)] min-[900px]:min-h-0 min-[900px]:flex-col min-[900px]:overflow-hidden min-[900px]:bg-paper">
+        <div className={`mt-6 ${talk && wide ? "min-[900px]:grid min-[900px]:grid-cols-[minmax(240px,300px)_minmax(0,1fr)] min-[900px]:items-start min-[900px]:gap-x-8" : ""}`}>
+          {talk && wide ? (
+            <aside>
+              <button type="button" className="min-h-11 text-sm" onClick={() => setTalk(false)}>Schließen</button>
+              <Workbook journal={journal} today={today} onPlaced={placed} />
+            </aside>
+          ) : null}
+          <div ref={stageRef} className="min-[900px]:flex min-[900px]:h-[calc(100dvh-7.5rem)] min-[900px]:min-h-0 min-[900px]:flex-col min-[900px]:overflow-hidden min-[900px]:bg-paper">
             {reminders.length > 0 ? (
               <div className="mb-3 grid gap-2">
                 {reminders.map((event) => (
@@ -226,14 +284,15 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
                   </button>
                 </div>
                 <TimeGrid
-                  days={gridDays}
+                  days={emptyRange ? [anchor] : gridDays}
                   events={journal.events}
                   todos={journal.todos}
                   profile={profile}
                   logs={journal.logs}
                   today={todayIso}
-                  onSlot={(date, slot) => setEditor({ date, time: slot })}
-                  onOpen={(event) => setEditor({ event, date: event.date })}
+                  showHours={timedHere}
+                  onSlot={(date, slot) => openQuick(date, slot)}
+                  onOpen={(event) => { setQuick(null); setEditor({ event, date: event.date }); }}
                   onMove={(event, date, slot) => {
                     if (!event.time) return;
                     const duration = minutesOf(endOf(event.time, event.end)) - minutesOf(event.time);
@@ -242,6 +301,22 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
                   }}
                   onToggleTodo={(id) => void journal.toggleTodo(id)}
                 />
+                {emptyRange || upcoming.length > 0 ? (
+                  <div className="mt-6">
+                    {emptyRange ? <p className="font-serif text-2xl leading-tight">{t("emptyDay")}</p> : null}
+                    {upcoming.map((event) => (
+                      <button
+                        key={event.id}
+                        type="button"
+                        className="mt-3 block min-h-11 text-left"
+                        onClick={() => selectDay(event.date)}
+                      >
+                        <span className="font-serif text-2xl">{formatWeekday(parseISODate(event.date), lang)} {parseISODate(event.date).getDate()}.</span>
+                        <span className="mt-1 block text-base">{event.time ? `${event.time} ` : ""}{event.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {view === "month" ? (
@@ -275,6 +350,26 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
           </div>
         </div>
       </div>
+      {quick ? (
+        <form
+          className="fixed inset-x-0 bottom-[4.75rem] z-30 border-t border-ink/15 bg-paper px-4 py-3 min-[900px]:bottom-0"
+          onSubmit={(event) => void commitQuick(event)}
+        >
+          <label className="sr-only" htmlFor="quick-title">{t("title")}</label>
+          <p className="text-sm text-ink/50">{quick.time}</p>
+          <input
+            id="quick-title"
+            value={quickTitle}
+            autoFocus
+            onChange={(event) => setQuickTitle(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setQuick(null);
+            }}
+            placeholder={t("title")}
+            className="min-h-11 w-full bg-transparent font-serif text-3xl outline-none"
+          />
+        </form>
+      ) : null}
       <div className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-between gap-3 border-t border-ink/10 bg-paper px-5 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] min-[900px]:hidden">
         <button type="button" className="min-h-11 px-2 text-base" onClick={jumpToday}>
           {t("todayJump")}
@@ -286,7 +381,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
           type="button"
           aria-label="Eintragen"
           className="grid h-12 w-12 place-items-center rounded-full bg-ink font-sans text-2xl leading-none text-paper transition-opacity duration-150"
-          onClick={() => setEditor({ date: selected })}
+          onClick={() => openQuick(selected)}
         >
           +
         </button>
@@ -306,7 +401,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
         </div>
       ) : null}
       {sheet ? (
-        <div className="fixed inset-0 z-30 overflow-y-auto bg-paper px-4 pt-[max(1rem,env(safe-area-inset-top))] min-[900px]:hidden">
+        <div className="fixed inset-0 z-30 overflow-y-auto bg-paper px-4 pt-[max(1rem,env(safe-area-inset-top))]">
           <DayCheckin
             profile={profile}
             date={openDate}

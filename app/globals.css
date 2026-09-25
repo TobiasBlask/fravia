@@ -46,3 +46,29 @@ input,
 textarea {
   font-family: inherit;
 }
+
+.fravia-account .cl-card,
+.fravia-account .cl-cardBox,
+.fravia-account .cl-rootBox,
+.fravia-account .cl-footer,
+.fravia-account .cl-socialButtonsBlockButton,
+.fravia-account .cl-formButtonPrimary {
+  background: transparent;
+  box-shadow: none;
+}
+
+.fravia-account .cl-card,
+.fravia-account .cl-cardBox {
+  border: none;
+  width: 100%;
+  padding: 0;
+}
+
+.fravia-account .cl-header {
+  display: none;
+}
+
+.fravia-account .cl-formButtonPrimary {
+  background: var(--ink);
+  color: var(--paper);
+}

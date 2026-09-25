@@ -70,6 +70,7 @@ export function Workbook({
       setProposals([]);
       setCarry("");
       onPlaced(proposal.date);
+      onClose?.();
     } catch {
       setTurns((current) => [...current, { who: "fravia", text: "Das hat nicht geklappt. Sag es noch einmal." }]);
     } finally {
@@ -97,7 +98,7 @@ export function Workbook({
         {mine ? <p className="mt-4 text-base leading-snug text-ink/75">{mine}</p> : null}
         {proposals.length > 0 ? (
           <div className="mt-8 grid gap-3">
-            {proposals.map((proposal) => {
+            {proposals.slice(0, 1).map((proposal) => {
               const when = proposalWhen(proposal.date);
               return (
                 <div key={`${proposal.date}-${proposal.title}`} className="rounded-[12px] border border-ink/15 bg-paper px-4 py-4">

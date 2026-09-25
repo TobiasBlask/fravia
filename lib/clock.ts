@@ -22,6 +22,13 @@ export function snapQuarter(minutes: number) {
   return Math.round(minutes / 15) * 15;
 }
 
+export function nextQuarter(now = new Date()) {
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const snapped = Math.ceil(minutes / 15) * 15;
+  if (snapped >= 24 * 60) return "23:45";
+  return clockOf(snapped);
+}
+
 export type Placed = {
   event: DayEvent;
   column: number;
