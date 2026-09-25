@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { DayBoard } from "@/components/day-board";
 import { DayCheckin } from "@/components/day-checkin";
 import { EventSheet } from "@/components/event-sheet";
+import { ConsequenceLead, WeekAsk } from "@/components/first-screen";
 import { useLang } from "@/components/lang";
 import { MonthStage } from "@/components/month-stage";
 import { TimeGrid } from "@/components/time-grid";
@@ -16,6 +17,7 @@ import { Workbook } from "@/components/workbook";
 import { YearStage } from "@/components/year-stage";
 import { clockOf, dueReminders, endOf, minutesOf, nextQuarter, reminderLine } from "@/lib/clock";
 import { addDays, formatWeekday, iso, parseISODate, startOfMonth, weekDates } from "@/lib/dates";
+import { consequence, type Proposal } from "@/lib/plan";
 import type { DayEvent } from "@/lib/types";
 import { stanceFor, tintHex } from "@/lib/voice";
 
@@ -38,6 +40,10 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
   const [editor, setEditor] = useState<{ event?: DayEvent; date: string; time?: string } | null>(null);
   const [quick, setQuick] = useState<{ date: string; time: string } | null>(null);
   const [quickTitle, setQuickTitle] = useState("");
+  const [intent, setIntent] = useState<string | null>(null);
+  const [skipped, setSkipped] = useState<string[]>([]);
+  const [placing, setPlacing] = useState(false);
+  const [failed, setFailed] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const view = picked ?? (wide ? "week" : "day");
   const counts = useMemo(() => {
@@ -71,7 +77,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
     function down(event: PointerEvent) {
       if (window.innerWidth >= 900) return;
       const target = event.target as HTMLElement | null;
-      if (target?.closest("[data-event], input, textarea, button, a, select")) return;
+      if (target?.closest("[data-event], input, textarea, button, a, select, [data-decision]")) return;
       tracking = true;
       startX = event.clientX;
       startY = event.clientY;
@@ -137,12 +143,56 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
     setQuickTitle("");
   }
 
+  async function commitNamed(proposal: Proposal) {
+    setPlacing(true);
+    setFailed(false);
+    try {
+      if (proposal.kind === "todo") {
+        await journal.addTodo({ title: proposal.title, date: proposal.date, freq: "none" });
+      } else {
+        await journal.addEvent({
+          title: proposal.title,
+          kind: proposal.kind,
+          date: proposal.date,
+          freq: "none",
+          ...(proposal.time ? { time: proposal.time } : {}),
+          ...(proposal.end ? { end: proposal.end } : {}),
+          ...(proposal.note ? { note: proposal.note } : {}),
+        });
+      }
+      setIntent(null);
+      placed(proposal.date);
+    } catch {
+      setFailed(true);
+    } finally {
+      setPlacing(false);
+    }
+  }
+
+  async function shiftEvent(id: string, date: string) {
+    setPlacing(true);
+    setFailed(false);
+    try {
+      await journal.moveEvent(id, date);
+      placed(date);
+    } catch {
+      setFailed(true);
+    } finally {
+      setPlacing(false);
+    }
+  }
+
   function jumpToday() {
     setSelected(todayIso);
     setCursor(today);
     setPicked(wide ? "week" : "day");
   }
 
+  const horizon = iso(addDays(today, 14));
+  const soon = journal.events.filter((event) => event.date >= todayIso && event.date < horizon);
+  const asking = soon.length === 0 && (view === "day" || view === "week");
+  const lead = soon.some((event) => !event.shared) ? consequence(profile, today, journal.events, journal.logs, skipped) : null;
+  const leadEvent = lead ? journal.events.find((event) => event.id === lead.eventId) : undefined;
   const reminders = dueReminders(journal.events, today).filter((event) => !hiddenReminders.includes(event.id));
   const needle = query.trim().toLowerCase();
   const hits = needle
@@ -228,7 +278,32 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
             </aside>
           ) : null}
           <div ref={stageRef} className="min-[900px]:flex min-[900px]:h-[calc(100dvh-7.5rem)] min-[900px]:min-h-0 min-[900px]:flex-col min-[900px]:overflow-hidden min-[900px]:bg-paper">
-            {reminders.length > 0 ? (
+            {asking ? (
+              <WeekAsk
+                profile={profile}
+                today={today}
+                logs={journal.logs}
+                intent={intent}
+                busy={placing}
+                failed={failed}
+                onIntent={setIntent}
+                onClear={() => setIntent(null)}
+                onCommit={(proposal) => void commitNamed(proposal)}
+              />
+            ) : null}
+            {!asking && lead ? (
+              <ConsequenceLead
+                profile={profile}
+                note={lead}
+                event={leadEvent}
+                logs={journal.logs}
+                busy={placing}
+                onMove={(date) => void shiftEvent(lead.eventId, date)}
+                onLeave={() => setSkipped((current) => [...current, lead.eventId])}
+              />
+            ) : null}
+            {failed && !asking ? <p className="mb-3 text-sm">Das hat nicht geklappt.</p> : null}
+            {asking ? null : reminders.length > 0 ? (
               <div className="mb-3 grid gap-2">
                 {reminders.map((event) => (
                   <div key={event.id} className="flex items-center justify-between gap-3 border-b border-ink/15 pb-2">
@@ -240,6 +315,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
                 ))}
               </div>
             ) : null}
+            {asking ? null : <>
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <input
                 type="date"
@@ -347,6 +423,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
                 />
               </div>
             ) : null}
+            </>}
           </div>
         </div>
       </div>

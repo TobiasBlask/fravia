@@ -1,5 +1,5 @@
 import { addDays, iso, parseISODate, startOfWeek } from "./dates";
-import type { DayLog, EventKind, Profile } from "./types";
+import type { DayEvent, DayLog, EventKind, Profile } from "./types";
 import { dayMark } from "./voice";
 
 export type Goal = "sport" | "feier" | "geburtstag" | "treffen" | "arbeit" | "fokus" | "erholung";
@@ -157,7 +157,7 @@ function goalOf(text: string): Goal | null {
   if (/erholung|ausruhen|ruhetag/.test(raw)) return "erholung";
   if (/geburtstag/.test(raw)) return "geburtstag";
   if (/feier|feiern|party/.test(raw)) return "feier";
-  if (/treffen|verabred/.test(raw)) return "treffen";
+  if (/gespräch|gesprach|treffen|verabred/.test(raw)) return "treffen";
   if (/fokus|konzentri/.test(raw)) return "fokus";
   if (/arbeit/.test(raw)) return "arbeit";
   if (/sport|training|trainieren/.test(raw)) return "sport";
@@ -310,7 +310,7 @@ function titleFor(goal: Goal, text: string) {
   if (goal === "sport") return /training/i.test(text) ? "Training" : "Sport";
   if (goal === "feier") return "Feier";
   if (goal === "geburtstag") return "Geburtstag";
-  if (goal === "treffen") return "Treffen";
+  if (goal === "treffen") return /gespräch|gesprach/i.test(text) ? "Gespräch" : "Treffen";
   if (goal === "fokus") return "Fokus";
   if (goal === "erholung") return "Erholung";
   return "Arbeit";
@@ -392,4 +392,224 @@ function weekday(date: Date) {
 
 function cap(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+export const WEEK_QUESTION = "Was willst du diese Woche unterbringen?";
+
+export const WEEK_CHIPS = ["Sport", "Gespräch", "Feier", "Fokus"] as const;
+
+export type WeekAnswer = {
+  sentence: string;
+  phase: string;
+  proposals: Proposal[];
+};
+
+export type Consequence = {
+  eventId: string;
+  sentence: string;
+  phase: string;
+  action: "move" | "keep";
+  targets: Array<{ date: string }>;
+};
+
+export function weekPlacement(text: string, profile: Profile, today: Date, logs: Record<string, DayLog>): WeekAnswer {
+  const trimmed = text.trim();
+  const goal = goalOf(trimmed) ?? "treffen";
+  const title = goalOf(trimmed) ? titleFor(goal, trimmed) : cap(trimmed);
+  const end = addDays(startOfWeek(today), 6);
+  const days: Date[] = [];
+  for (let cursor = today; iso(cursor) <= iso(end); cursor = addDays(cursor, 1)) days.push(new Date(cursor));
+  const ranked = rank(profile, days, logs, goal).filter((day) => day.score >= (HIGH.has(goal) ? 40 : 1));
+  if (ranked.length === 0) {
+    return {
+      sentence: unfitWeek(profile, today, logs),
+      phase: phaseLabel(profile, today, logs[iso(today)]),
+      proposals: [],
+    };
+  }
+  const second = profile.persona === "menopause" ? ranked[1] : undefined;
+  const place = placement(goal, profile);
+  const item = (day: Date): Proposal => ({
+    date: iso(day),
+    goal,
+    kind: place.kind === "todo" ? "termin" : place.kind,
+    title,
+    time: place.time,
+    end: place.end,
+    note: place.note,
+    fixed: false,
+  });
+  const proposals = [item(ranked[0].date), ...(second ? [item(second.date)] : [])];
+  const phase = phaseLabel(profile, ranked[0].date, logs[iso(ranked[0].date)]);
+  if (profile.persona === "menopause") {
+    const sentence = second
+      ? `${cap(weekday(ranked[0].date))} oder ${weekday(ranked[1].date)}. Beides ist eine Schätzung.`
+      : `${cap(weekday(ranked[0].date))} wäre möglich. Es ist eine Schätzung.`;
+    return { sentence, phase, proposals };
+  }
+  if (profile.persona === "pill") {
+    const energy = logs[iso(ranked[0].date)]?.energy;
+    const sentence = energy
+      ? `${cap(weekday(ranked[0].date))} passt für ${title}. Du hast dort Energie ${energy} eingetragen.`
+      : `${cap(weekday(ranked[0].date))} passt für ${title}.`;
+    return { sentence, phase, proposals };
+  }
+  if (profile.persona === "pain") {
+    return {
+      sentence: `${cap(weekday(ranked[0].date))} passt für ${title}. Kurz und früh.`,
+      phase,
+      proposals,
+    };
+  }
+  return { sentence: `${cap(weekday(ranked[0].date))} passt für ${title}.`, phase, proposals };
+}
+
+export function consequence(
+  profile: Profile,
+  today: Date,
+  events: DayEvent[],
+  logs: Record<string, DayLog>,
+  skipped: string[] = [],
+): Consequence | null {
+  const limit = iso(addDays(today, 14));
+  const soon = events.filter((event) => !event.shared && event.date >= iso(today) && event.date < limit && !skipped.includes(event.id));
+  const looked = soon
+    .map((event) => judge(profile, today, event, logs))
+    .filter((item): item is Consequence & { weight: number } => item !== null)
+    .sort((a, b) => b.weight - a.weight || a.eventId.localeCompare(b.eventId));
+  const worst = looked.find((item) => item.weight > 0);
+  if (worst) {
+    const { weight: _weight, ...rest } = worst;
+    return rest;
+  }
+  return null;
+}
+
+function judge(
+  profile: Profile,
+  today: Date,
+  event: DayEvent,
+  logs: Record<string, DayLog>,
+): (Consequence & { weight: number }) | null {
+  const read = readEvent(event);
+  if (!read) return null;
+  const when = parseISODate(event.date);
+  const log = logs[event.date];
+  const current = scoreDay(profile, when, log, read.goal);
+  const horizon: Date[] = [];
+  for (let index = 0; index < 14; index += 1) horizon.push(addDays(today, index));
+  const better = rank(profile, horizon.filter((day) => iso(day) !== event.date), logs, read.goal).filter((day) => day.score > 0);
+  const best = better[0];
+  const poor = current < 40 || (profile.persona === "pain" && hardPain(log) && HIGH.has(read.goal));
+  if (!poor) return null;
+  const gain = best ? best.score - current : 0;
+  const phase = phaseLabel(profile, when, log);
+  const where = inPhrase(profile, when, log);
+  const name = cap(weekday(when));
+  const blocked = Boolean(best && profile.persona === "pain" && hardPain(logs[iso(best.date)]) && HIGH.has(read.goal));
+  if (!read.fixed && best && gain >= 20 && !blocked) {
+    const second = profile.persona === "menopause" ? better[1] : undefined;
+    const targets = [{ date: iso(best.date) }, ...(second ? [{ date: iso(second.date) }] : [])];
+    const sentence = profile.persona === "menopause"
+      ? second
+        ? `${read.title} am ${name}. ${cap(weekday(best.date))} oder ${weekday(second.date)} – beides ist eine Schätzung.`
+        : `${read.title} am ${name}. ${cap(weekday(best.date))} wäre möglich. Es ist eine Schätzung.`
+      : profile.persona === "pain" && hardPain(log)
+        ? `${read.title} am ${name} liegt an einem Tag mit starkem Schmerz. ${cap(weekday(best.date))} passt besser.`
+        : `${read.title} am ${name} liegt ${where}. ${cap(weekday(best.date))} passt besser.`;
+    return { eventId: event.id, sentence, phase, action: "move", targets, weight: Math.max(gain, 100 - current) };
+  }
+  const how = howTo(profile, when, log, read.goal, read.title);
+  if (profile.persona === "menopause") {
+    return {
+      eventId: event.id,
+      sentence: `${read.named} am ${name}. ${how} Es ist eine Schätzung.`,
+      phase,
+      action: "keep",
+      targets: [],
+      weight: 80 - current,
+    };
+  }
+  if (!where) return null;
+  const sentence = profile.persona === "pain" && hardPain(log) && HIGH.has(read.goal)
+    ? `${read.title} am ${name} liegt an einem Tag mit starkem Schmerz. Eine harte Einheit lasse ich weg.`
+    : `${read.named} am ${name} liegt ${where}. ${how}`;
+  return { eventId: event.id, sentence, phase, action: "keep", targets: [], weight: 80 - current };
+}
+
+function readEvent(event: DayEvent): { goal: Goal; fixed: boolean; title: string; named: string } | null {
+  const raw = event.title.toLowerCase();
+  if (event.kind === "geburtstag" || /geburtstag/.test(raw)) return { goal: "geburtstag", fixed: true, title: "Geburtstag", named: "Der Geburtstag" };
+  if (event.kind === "sport" || /sport|training/.test(raw)) {
+    const title = /training/i.test(event.title) ? "Training" : "Sport";
+    return { goal: "sport", fixed: false, title, named: title };
+  }
+  if (/feier|party/.test(raw)) return { goal: "feier", fixed: true, title: "Feier", named: "Die Feier" };
+  if (/gespräch|gesprach/.test(raw)) return { goal: "treffen", fixed: false, title: "Gespräch", named: "Das Gespräch" };
+  if (/treffen|verabred/.test(raw)) return { goal: "treffen", fixed: false, title: "Treffen", named: "Das Treffen" };
+  if (/fokus/.test(raw)) return { goal: "fokus", fixed: false, title: "Fokus", named: "Fokus" };
+  if (/arbeit/.test(raw)) return { goal: "arbeit", fixed: false, title: "Arbeit", named: "Die Arbeit" };
+  if (event.kind === "termin") return { goal: "treffen", fixed: true, title: event.title, named: event.title };
+  return null;
+}
+
+function unfitWeek(profile: Profile, today: Date, logs: Record<string, DayLog>) {
+  const end = addDays(startOfWeek(today), 6);
+  const days: Date[] = [];
+  for (let cursor = today; iso(cursor) <= iso(end); cursor = addDays(cursor, 1)) days.push(new Date(cursor));
+  if (profile.persona === "pain" && days.some((day) => hardPain(logs[iso(day)]))) {
+    return "Der Schmerz ist diese Woche stark. Eine harte Einheit lege ich nicht.";
+  }
+  if (profile.persona === "pain") return "Diese Woche lieber kurz. Eine harte Einheit lege ich nicht.";
+  if (profile.persona === "menopause") return "Diese Woche ist unsicher. Eine harte Einheit lege ich nicht. Es ist eine Schätzung.";
+  if (profile.persona === "pill") {
+    const band = dayMark(profile, today, logs[iso(today)]).band;
+    if (band === "Pause") return "Diese Woche ist die Pause. Eine harte Einheit lege ich nicht.";
+    if (band === "Vor der Pause") return "Diese Woche ist vor der Pause. Mach es kürzer.";
+    if (band === "Anlauf") return "Diese Woche ist der Anlauf. Eine harte Einheit lege ich nicht.";
+    return "Eine harte Einheit lege ich diese Woche nicht.";
+  }
+  const where = inPhrase(profile, today);
+  if (where === "in der Menstruation") return "Diese Woche ist die Menstruation. Eine harte Einheit lege ich nicht.";
+  if (where === "in der Lutealphase") return "Diese Woche ist die Lutealphase. Mach es kürzer und früher.";
+  return "Eine harte Einheit lege ich diese Woche nicht.";
+}
+
+function phaseLabel(profile: Profile, date: Date, log?: DayLog) {
+  if (profile.persona === "menopause") return "Schätzung";
+  return dayMark(profile, date, profile.persona === "pain" ? log : undefined).band;
+}
+
+function inPhrase(profile: Profile, date: Date, log?: DayLog) {
+  if (profile.persona === "menopause") return "";
+  if (profile.persona === "pain" && hardPain(log)) return "an einem Tag mit starkem Schmerz";
+  if (profile.persona === "pill") {
+    const band = dayMark(profile, date, log).band;
+    if (band === "Anlauf") return "im Anlauf";
+    if (band === "Vor der Pause") return "vor der Pause";
+    if (band === "Mitte") return "in der Mitte";
+    if (band === "Pause") return "in der Pause";
+    return "";
+  }
+  const tint = dayMark(profile, date).tint;
+  if (tint === "menstruation") return "in der Menstruation";
+  if (tint === "follicular") return "in der Follikelphase";
+  if (tint === "ovulation") return "in der Ovulation";
+  if (tint === "luteal") return "in der Lutealphase";
+  return "";
+}
+
+function howTo(profile: Profile, date: Date, log: DayLog | undefined, goal: Goal, title: string) {
+  if (profile.persona === "pain" && hardPain(log)) return "Eine harte Einheit lasse ich weg.";
+  if (profile.persona === "pill") {
+    const band = dayMark(profile, date, log).band;
+    if (band === "Pause" || band === "Vor der Pause") return "Mach es kürzer.";
+    return "Lass es so, wenn es sich leicht anfühlt.";
+  }
+  const tint = dayMark(profile, date).tint;
+  if (tint === "luteal" && (goal === "feier" || goal === "geburtstag" || title === "Feier")) return "Mach sie kürzer und früher.";
+  if (tint === "luteal") return "Mach es kürzer und früher.";
+  if (tint === "menstruation" && title === "Feier") return "Mach sie kürzer.";
+  if (tint === "menstruation") return "Mach es kürzer.";
+  return "Mach es kürzer.";
 }
