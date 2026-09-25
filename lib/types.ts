@@ -40,6 +40,9 @@ export type DayEvent = {
   kind: EventKind;
   date: string;
   time?: string;
+  end?: string;
+  location?: string;
+  remind?: number;
   note?: string;
   freq: string;
   seriesId: string;

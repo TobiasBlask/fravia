@@ -226,7 +226,7 @@ export function SettingsView({ journal }: { journal: ReturnType<typeof useJourna
               if (!file) return;
               const parsed = parseIcs(await file.text());
               for (const item of parsed) {
-                await journal.addEvent({ title: item.title, kind: "termin", date: item.date, freq: "none", ...(item.time ? { time: item.time } : {}), ...(item.note ? { note: item.note } : {}) });
+                await journal.addEvent({ title: item.title, kind: "termin", date: item.date, freq: "none", ...(item.time ? { time: item.time } : {}), ...(item.end ? { end: item.end } : {}), ...(item.location ? { location: item.location } : {}), ...(item.note ? { note: item.note } : {}) });
               }
               if (parsed[0]) journal.setFocus(parsed[0].date);
             }}

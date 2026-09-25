@@ -66,6 +66,7 @@ export function Workbook({
           date: proposal.date,
           freq: "none",
           ...(proposal.time ? { time: proposal.time } : {}),
+          ...(proposal.end ? { end: proposal.end } : {}),
           ...(proposal.note ? { note: proposal.note } : {}),
         });
       }

@@ -18,6 +18,28 @@ async function requireUser(ctx: MutationCtx | QueryCtx) {
     .first();
 }
 
+function dayDelta(from: string, to: string) {
+  const start = Date.parse(`${from}T00:00:00Z`);
+  const end = Date.parse(`${to}T00:00:00Z`);
+  return Math.round((end - start) / 86_400_000);
+}
+
+function timedFields(args: {
+  time?: string;
+  end?: string;
+  note?: string;
+  location?: string;
+  remind?: number;
+}) {
+  return {
+    ...(args.time ? { time: args.time } : {}),
+    ...(args.end ? { end: args.end } : {}),
+    ...(args.note ? { note: args.note.slice(0, 280) } : {}),
+    ...(args.location ? { location: args.location.slice(0, 140) } : {}),
+    ...(args.remind ? { remind: args.remind } : {}),
+  };
+}
+
 function addDays(iso: string, days: number) {
   const [y, m, d] = iso.split("-").map(Number);
   const date = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
@@ -102,6 +124,9 @@ export const span = query({
           kind: row.kind,
           date: row.date,
           time: row.time,
+          end: row.end,
+          location: row.location,
+          remind: row.remind,
           note: share.hidePhase ? undefined : row.note,
           freq: row.freq,
           seriesId: row.seriesId,
@@ -119,6 +144,9 @@ export const addEvent = mutation({
     kind,
     date: v.string(),
     time: v.optional(v.string()),
+    end: v.optional(v.string()),
+    location: v.optional(v.string()),
+    remind: v.optional(v.number()),
     note: v.optional(v.string()),
     freq: v.string(),
     until: v.optional(v.string()),
@@ -136,8 +164,7 @@ export const addEvent = mutation({
         date,
         freq,
         seriesId,
-        ...(args.time ? { time: args.time } : {}),
-        ...(args.note ? { note: args.note.slice(0, 280) } : {}),
+        ...timedFields(args),
       });
     }
     return seriesId;
@@ -145,33 +172,81 @@ export const addEvent = mutation({
 });
 
 export const moveEvent = mutation({
-  args: { id: v.id("events"), date: v.string() },
+  args: {
+    id: v.id("events"),
+    date: v.string(),
+    time: v.optional(v.string()),
+    end: v.optional(v.string()),
+    series: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     if (!user) throw new Error("Nicht angemeldet");
     const row = await ctx.db.get(args.id);
     if (!row || row.userId !== user._id) return;
-    await ctx.db.patch(args.id, { date: args.date });
+    const clock = {
+      ...(args.time !== undefined ? { time: args.time } : {}),
+      ...(args.end !== undefined ? { end: args.end } : {}),
+    };
+    if (!args.series || row.freq === "none") {
+      await ctx.db.patch(args.id, { date: args.date, ...clock });
+      return;
+    }
+    const delta = dayDelta(row.date, args.date);
+    const all = await ctx.db
+      .query("events")
+      .withIndex("by_user_date", (q) => q.eq("userId", user._id))
+      .collect();
+    for (const item of all) {
+      if (item.seriesId !== row.seriesId) continue;
+      await ctx.db.patch(item._id, { date: addDays(item.date, delta), ...clock });
+    }
   },
 });
 
 export const patchEvent = mutation({
   args: {
     id: v.id("events"),
+    series: v.boolean(),
     title: v.optional(v.string()),
+    kind: v.optional(kind),
+    date: v.optional(v.string()),
     time: v.optional(v.string()),
+    end: v.optional(v.string()),
     note: v.optional(v.string()),
+    location: v.optional(v.string()),
+    remind: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     if (!user) throw new Error("Nicht angemeldet");
     const row = await ctx.db.get(args.id);
     if (!row || row.userId !== user._id) return;
-    await ctx.db.patch(args.id, {
+    const patch = {
       ...(args.title ? { title: args.title.slice(0, 140) } : {}),
+      ...(args.kind ? { kind: args.kind } : {}),
       ...(args.time !== undefined ? { time: args.time } : {}),
+      ...(args.end !== undefined ? { end: args.end } : {}),
       ...(args.note !== undefined ? { note: args.note.slice(0, 280) } : {}),
-    });
+      ...(args.location !== undefined ? { location: args.location.slice(0, 140) } : {}),
+      ...(args.remind !== undefined ? { remind: args.remind } : {}),
+    };
+    if (!args.series || row.freq === "none") {
+      await ctx.db.patch(args.id, { ...patch, ...(args.date ? { date: args.date } : {}) });
+      return;
+    }
+    const delta = args.date ? dayDelta(row.date, args.date) : 0;
+    const all = await ctx.db
+      .query("events")
+      .withIndex("by_user_date", (q) => q.eq("userId", user._id))
+      .collect();
+    for (const item of all) {
+      if (item.seriesId !== row.seriesId) continue;
+      await ctx.db.patch(item._id, {
+        ...patch,
+        ...(args.date ? { date: addDays(item.date, delta) } : {}),
+      });
+    }
   },
 });
 
@@ -458,6 +533,9 @@ export const feed = query({
       title: row.title,
       date: row.date,
       time: row.time ?? "",
+      end: row.end ?? "",
+      location: row.location ?? "",
+      note: row.note ?? "",
       kind: row.kind,
     }));
   },

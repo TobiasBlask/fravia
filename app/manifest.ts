@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Fravia – Dein Zykluskalender",
     short_name: "Fravia",
-    description: "für dich, im Einklang mit deinem Zyklus.",
+    description: "Termine, Sport und Pausen, passend zu deiner Phase.",
     start_url: "/",
     scope: "/",
     display: "standalone",

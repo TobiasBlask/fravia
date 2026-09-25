@@ -5,16 +5,19 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { DayBoard } from "@/components/day-board";
 import { DayCheckin } from "@/components/day-checkin";
+import { EventSheet } from "@/components/event-sheet";
 import { useLang } from "@/components/lang";
 import { MonthStage } from "@/components/month-stage";
+import { TimeGrid } from "@/components/time-grid";
 import type { useJournal } from "@/components/use-journal";
 import { VoiceBox } from "@/components/voice-box";
 import { Wash } from "@/components/wash";
-import { WeekStage } from "@/components/week-stage";
 import { Workbook } from "@/components/workbook";
 import { YearStage } from "@/components/year-stage";
-import { iso, parseISODate, startOfMonth } from "@/lib/dates";
+import { clockOf, dueReminders, endOf, minutesOf, reminderLine } from "@/lib/clock";
+import { addDays, iso, parseISODate, startOfMonth, weekDates } from "@/lib/dates";
 import { openingLine } from "@/lib/plan";
+import type { DayEvent } from "@/lib/types";
 import { PERSONA_LINE, stanceFor, tintHex } from "@/lib/voice";
 
 export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
@@ -27,7 +30,12 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
   const [selected, setSelected] = useState(todayIso);
   const [sheet, setSheet] = useState(false);
   const [talk, setTalk] = useState(false);
-  const [view, setView] = useState<"month" | "week" | "year">("month");
+  const [wide, setWide] = useState(false);
+  const [picked, setPicked] = useState<"day" | "week" | "month" | "year" | null>(null);
+  const [query, setQuery] = useState("");
+  const [hiddenReminders, setHiddenReminders] = useState<string[]>([]);
+  const [editor, setEditor] = useState<{ event?: DayEvent; date: string; time?: string } | null>(null);
+  const view = picked ?? (wide ? "week" : "day");
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
     for (const event of journal.events) map[event.date] = (map[event.date] ?? 0) + 1;
@@ -36,10 +44,18 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
   }, [journal.events, journal.todos]);
 
   useEffect(() => {
+    const media = window.matchMedia("(min-width: 900px)");
+    const apply = () => setWide(media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, []);
+
+  useEffect(() => {
     if (!journal.focus) return;
     setSelected(journal.focus);
-    setCursor(startOfMonth(parseISODate(journal.focus)));
-    setView("month");
+    setCursor(parseISODate(journal.focus));
+    setPicked(window.matchMedia("(min-width: 900px)").matches ? "week" : "day");
   }, [journal.focus]);
 
   if (!profile) return null;
@@ -54,14 +70,29 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
 
   function selectDay(date: string) {
     setSelected(date);
-    if (window.matchMedia("(max-width: 899px)").matches) setSheet(true);
+    setCursor(parseISODate(date));
+    if (window.matchMedia("(max-width: 899px)").matches) setPicked("day");
   }
 
   function placed(date: string) {
     setSelected(date);
-    setCursor(startOfMonth(parseISODate(date)));
-    setView("month");
+    setCursor(parseISODate(date));
+    setPicked(window.matchMedia("(min-width: 900px)").matches ? "week" : "day");
   }
+
+  function jumpToday() {
+    setSelected(todayIso);
+    setCursor(today);
+    setPicked(wide ? "week" : "day");
+  }
+
+  const reminders = dueReminders(journal.events, today).filter((event) => !hiddenReminders.includes(event.id));
+  const needle = query.trim().toLowerCase();
+  const hits = needle
+    ? journal.events.filter((event) => [event.title, event.location, event.note].some((value) => value?.toLowerCase().includes(needle))).slice(0, 8)
+    : [];
+  const anchor = parseISODate(selected);
+  const gridDays = view === "week" ? weekDates(anchor) : [anchor];
 
   return (
     <>
@@ -134,30 +165,91 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
               </div>
             </details>
           </header>
-          <div className="mt-10 min-[900px]:mt-0">
-            <div className="mb-4 flex gap-4 text-sm">
-              {(["month", "week", "year"] as const).map((item) => (
-                <button key={item} type="button" className={`min-h-12 ${view === item ? "border-b border-ink" : ""}`} onClick={() => setView(item)}>
-                  {t(item)}
+          <div className="mt-6 min-[900px]:mt-0 min-[900px]:h-[calc(100dvh-5rem)] min-[900px]:overflow-hidden">
+            {reminders.length > 0 ? (
+              <div className="mb-3 grid gap-2">
+                {reminders.map((event) => (
+                  <div key={event.id} className="flex items-center justify-between gap-3 border-b border-ink/15 pb-2">
+                    <p className="text-sm">{reminderLine(event, today)}</p>
+                    <button type="button" className="min-h-10 shrink-0 text-sm" onClick={() => setHiddenReminders((current) => [...current, event.id])}>
+                      {t("done")}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              {(["day", "week", "month", "year"] as const).map((item) => (
+                <button key={item} type="button" className={`min-h-12 ${view === item ? "border-b border-ink" : ""}`} onClick={() => setPicked(item)}>
+                  {item === "day" ? t("dayView") : t(item)}
                 </button>
               ))}
+              <button type="button" className="min-h-12" onClick={jumpToday}>{t("todayJump")}</button>
+              <input
+                type="date"
+                aria-label={t("todayJump")}
+                className="min-h-12 bg-transparent"
+                value={selected}
+                onChange={(event) => {
+                  if (!event.target.value) return;
+                  selectDay(event.target.value);
+                }}
+              />
             </div>
+            <label className="mb-3 block">
+              <span className="sr-only">{t("search")}</span>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("search")}
+                className="min-h-12 w-full border-b border-ink/30 bg-transparent"
+              />
+            </label>
+            {needle && hits.length === 0 ? <p className="mb-3 text-sm">{t("searchEmpty")}</p> : null}
+            {hits.length > 0 ? (
+              <ul className="mb-3 grid gap-1">
+                {hits.map((event) => (
+                  <li key={event.id}>
+                    <button type="button" className="min-h-10 text-left text-sm" onClick={() => { selectDay(event.date); setQuery(""); setEditor({ event, date: event.date }); }}>
+                      {event.date} {event.time ? `${event.time} ` : ""}{event.title}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {view === "day" || view === "week" ? (
+              <div className="min-[900px]:h-[calc(100dvh-14rem)]">
+                <div className="mb-2 flex items-center justify-between text-sm">
+                  <button type="button" className="min-h-12 px-3" onClick={() => selectDay(iso(addDays(parseISODate(selected), view === "week" ? -7 : -1)))} aria-label={t("back")}>
+                    ‹
+                  </button>
+                  <button type="button" className="min-h-12 px-3" onClick={() => selectDay(iso(addDays(parseISODate(selected), view === "week" ? 7 : 1)))} aria-label={t("dayView")}>
+                    ›
+                  </button>
+                </div>
+                <TimeGrid
+                  days={gridDays}
+                  events={journal.events}
+                  todos={journal.todos}
+                  profile={profile}
+                  logs={journal.logs}
+                  today={todayIso}
+                  onSlot={(date, slot) => setEditor({ date, time: slot })}
+                  onOpen={(event) => setEditor({ event, date: event.date })}
+                  onMove={(event, date, slot) => {
+                    if (!event.time) return;
+                    const duration = minutesOf(endOf(event.time, event.end)) - minutesOf(event.time);
+                    void journal.moveEvent(event.id, date, { time: slot, end: clockOf(minutesOf(slot) + duration) });
+                    setSelected(date);
+                  }}
+                  onToggleTodo={(id) => void journal.toggleTodo(id)}
+                />
+              </div>
+            ) : null}
             {view === "month" ? (
               <MonthStage
                 profile={profile}
-                cursor={cursor}
-                today={today}
-                logs={journal.logs}
-                selected={selected}
-                counts={counts}
-                onCursor={setCursor}
-                onSelect={selectDay}
-              />
-            ) : null}
-            {view === "week" ? (
-              <WeekStage
-                profile={profile}
-                cursor={cursor}
+                cursor={startOfMonth(cursor)}
                 today={today}
                 logs={journal.logs}
                 selected={selected}
@@ -174,7 +266,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
                 onYear={(year) => setCursor(new Date(year, cursor.getMonth(), 1))}
                 onOpenMonth={(month) => {
                   setCursor(new Date(cursor.getFullYear(), month, 1));
-                  setView("month");
+                  setPicked("month");
                 }}
               />
             ) : null}
@@ -196,6 +288,15 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
           Heute
         </button>
       </div>
+      {editor ? (
+        <EventSheet
+          journal={journal}
+          date={editor.date}
+          event={editor.event}
+          time={editor.time}
+          onClose={() => setEditor(null)}
+        />
+      ) : null}
       {talk ? (
         <div className="fixed inset-0 z-40 bg-paper min-[900px]:hidden">
           <Workbook journal={journal} today={today} onPlaced={placed} onClose={() => setTalk(false)} />

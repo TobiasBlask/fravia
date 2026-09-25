@@ -17,12 +17,12 @@ export const PERSONAS: Array<{ id: Persona; title: string; line: string }> = [
   {
     id: "pill",
     title: "Auf der Pille",
-    line: "Du bist herzlich willkommen. Kein Eisprung – ich begleite Energie, Stimmung und die Pause.",
+    line: "Du nimmst die Pille. Ich frage nach Energie, Stimmung und der Pause.",
   },
   {
     id: "pain",
     title: "Mit Schmerz",
-    line: "Wenn es weh tut, zählt was heute geht. Ruhe-Tage sind erlaubt.",
+    line: "Wenn es weh tut, plane ich kürzer. Ruhe-Tage sind erlaubt.",
   },
   {
     id: "menopause",
@@ -32,9 +32,9 @@ export const PERSONAS: Array<{ id: Persona; title: string; line: string }> = [
 ];
 
 export const PERSONA_LINE: Record<Persona, string> = {
-  rhythm: "für dich, im Einklang mit deinem Zyklus.",
-  pill: "Ich tracke mit dir – auch ohne natürlichen Zyklus.",
-  pain: "Sanft, in deinem Tempo.",
+  rhythm: "Ich plane mit deiner Phase.",
+  pill: "Ich plane nach dem, was du einträgst.",
+  pain: "Wenn es weh tut, plane ich kürzer.",
   menopause: "Schlaf, Hitze, Stimmung. Mehr ist nicht sicher.",
 };
 
@@ -51,36 +51,30 @@ const RHYTHM: Record<Exclude<TintKey, "paper">, Voice> = {
     id: "rhythm-menstruation",
     kicker: "Menstruation",
     lines: [
-      "Ruhe und Regeneration.",
-      "Dein Körper braucht jetzt Wärme, Eisen und Mitgefühl.",
+      "Du bist in der Menstruation.",
+      "Ruhe und Wärme passen. Hartes Training nicht.",
     ],
     food: "Eisenreiches Gemüse, Linsen, Ingwer- oder Kamillentee.",
-    move: "Sanftes Yoga, ein Spaziergang. Ruhe-Tage sind erlaubt.",
+    move: "Spaziergang oder liegen. Kein hartes Training.",
   },
   follicular: {
     id: "rhythm-follicular",
     kicker: "Follikelphase",
-    lines: ["Deine Energie steigt.", "Guter Moment für Neues, Kreatives und Bewegung."],
+    lines: ["Du bist in der Follikelphase.", "Sport und neue Aufgaben passen."],
     food: "Frische Salate, Avocado, Nüsse, Beeren.",
-    move: "Cardio, Tanzen, etwas Neues ausprobieren.",
+    move: "Cardio, Tanzen oder etwas Neues.",
   },
   ovulation: {
     id: "rhythm-ovulation",
     kicker: "Ovulation",
-    lines: [
-      "Höchste Energie und Strahlkraft.",
-      "Großes wagen, sichtbar sein.",
-    ],
+    lines: ["Du bist in der Ovulation.", "Sport, Fokus und eine Feier passen."],
     food: "Viel Wasser, Gemüse, Quinoa, Samen.",
-    move: "Kraft, ein Kurs, intensiver wenn du magst.",
+    move: "Kraft oder ein Kurs, intensiver wenn du magst.",
   },
   luteal: {
     id: "rhythm-luteal",
     kicker: "Lutealphase",
-    lines: [
-      "Fokus und ein bisschen Aufräumen.",
-      "Dein Körper braucht Magnesium und Mitgefühl mit sich.",
-    ],
+    lines: ["Du bist in der Lutealphase.", "Plane kürzer. Hartes Training eher nicht."],
     food: "Süßkartoffel, Mandeln, Spinat, Omega-3.",
     move: "Pilates, ein langer Spaziergang, moderates Krafttraining.",
   },
@@ -92,44 +86,35 @@ const PILL: Record<"pause" | "anlauf" | "mitte" | "vormbruch", Voice & { tint: T
     tint: "menstruation",
     kicker: "Pause",
     lines: [
-      "Das ist deine Pause.",
-      "Die Blutung ist eine Abbruchblutung, kein Eisprung. Wärme tut dir gut.",
+      "Du bist in der Pause.",
+      "Wärme tut gut. Eine harte Einheit lasse ich weg.",
     ],
     food: "Warmes und Einfaches. Eisen, wenn die Blutung da ist.",
-    move: "Sanft bleiben. Kein Programm, das einen Zyklus voraussetzt.",
+    move: "Spaziergang oder liegen. Kein hartes Training.",
   },
   anlauf: {
     id: "pill-anlauf",
     tint: "follicular",
     kicker: "Anlauf",
-    lines: [
-      "Die Pause ist vorbei.",
-      "Die Energie kommt nicht auf Kommando – ich begleite dich trotzdem.",
-    ],
-    food: "Iss normal. Nichts Heldenhaftes.",
+    lines: ["Die Pause ist vorbei.", "Plane nach dem, wie du dich fühlst."],
+    food: "Iss normal.",
     move: "Leicht bewegen, bis es sich stabil anfühlt.",
   },
   mitte: {
     id: "pill-mitte",
     tint: "ovulation",
     kicker: "Mitte",
-    lines: [
-      "Stabilere Tage.",
-      "Hier kannst du legen, was bleiben soll. Ohne Zyklusrede.",
-    ],
+    lines: ["Mitte der Packung.", "Training passt, wenn du Lust hast."],
     food: "Regelmäßig, so wie es dir schmeckt.",
-    move: "Training passt, wenn du Lust hast. Das ist kein Energiehoch aus einem Eisprung.",
+    move: "Training passt, wenn du Lust hast.",
   },
   vormbruch: {
     id: "pill-vormbruch",
     tint: "luteal",
     kicker: "Vor der Pause",
-    lines: [
-      "Kurz vor der Pause wird es oft dünner.",
-      "Track die Stimmung, ohne ein Drama daraus zu machen.",
-    ],
-    food: "Regelmäßige Mahlzeiten. Magnesium darf mit.",
-    move: "Kürzer bewegen. Sanft ist genug.",
+    lines: ["Kurz vor der Pause.", "Plane kürzer."],
+    food: "Regelmäßige Mahlzeiten. Magnesium, wenn du magst.",
+    move: "Kürzer bewegen. Sanft reicht.",
   },
 };
 
@@ -137,42 +122,30 @@ const PAIN_PHASE: Record<Exclude<TintKey, "paper">, Voice> = {
   menstruation: {
     id: "pain-menstruation",
     kicker: "Menstruation",
-    lines: [
-      "Dein Körper arbeitet gerade.",
-      "Ruhe und Wärme tun dir heute besonders gut.",
-    ],
+    lines: ["Du bist in der Menstruation.", "Ruhe und Wärme. Kein hartes Training."],
     food: "Warmes, Eisen, Ingwer. Nichts, das den Bauch reizt.",
-    move: "Sanftes Yoga oder liegen. Kein hohes Tempo.",
+    move: "Spaziergang oder liegen. Kein hartes Training.",
   },
   follicular: {
     id: "pain-follicular",
     kicker: "Danach",
-    lines: [
-      "Wenn der Schmerz nachlässt, ist das Luft.",
-      "Du musst die aufgeschobene Liste nicht heute schaffen.",
-    ],
+    lines: ["Der Schmerz lässt nach.", "Du musst heute nichts aufholen."],
     food: "Leicht und warm, was dir guttut.",
-    move: "Bewegung, die sich leicht anlässt. Nicht mehr.",
+    move: "Bewegung, die leicht anfängt. Nicht mehr.",
   },
   ovulation: {
     id: "pain-ovulation",
     kicker: "Ein stärkerer Tag",
-    lines: [
-      "Ein stärkerer Tag ist kein Versprechen.",
-      "Schmerz darf trotzdem da sein.",
-    ],
-    food: "Iss, wonach dir ist. Nichts, das du dir verdienen musst.",
-    move: "Eine Sache, die guttut. Kein intensives Programm aus Gewohnheit.",
+    lines: ["Heute geht etwas mehr.", "Schmerz kann trotzdem da sein."],
+    food: "Iss, wonach dir ist.",
+    move: "Eine Sache, die guttut. Kein hartes Programm.",
   },
   luteal: {
     id: "pain-luteal",
-    kicker: "Kleineres Maß",
-    lines: [
-      "Die Kapazität wird knapper.",
-      "Schneide den Tag, bevor der Schmerz es tut.",
-    ],
+    kicker: "Kürzer",
+    lines: ["Du bist in der Lutealphase.", "Plane weniger, kürzer und früher."],
     food: "Magnesium, warme Mahlzeiten, kleinere Portionen.",
-    move: "Pilates oder ein Spaziergang. Ruhe-Tage bleiben erlaubt.",
+    move: "Pilates oder ein Spaziergang. Ruhe-Tage sind erlaubt.",
   },
 };
 
@@ -185,36 +158,36 @@ const PAIN_LOG: Record<
     tint: "follicular",
     band: "Luft",
     kicker: "Luft",
-    lines: ["Heute ist Kapazität da.", "Mehr mache ich daraus nicht."],
-    food: "Normal essen. Nichts zum Aufholen.",
-    move: "Bewegung, die sich gut anfühlt. Kein Nachholen.",
+    lines: ["Heute geht mehr.", "Nicht nachholen, was liegen blieb."],
+    food: "Normal essen.",
+    move: "Bewegung, die sich gut anfühlt.",
   },
   light: {
     id: "pain-light",
     tint: "ovulation",
     band: "Spürbar",
     kicker: "Spürbar",
-    lines: ["Heute mit Rand.", "Der Schmerz ist da und begrenzt den Tag."],
-    food: "Warmes, Leichtes. Eine echte Pause dazwischen.",
-    move: "Sanft. Durchziehen ist keine Tugend.",
+    lines: ["Der Schmerz ist spürbar.", "Plane mit Puffer, kürzer als sonst."],
+    food: "Warmes, Leichtes. Eine Pause dazwischen.",
+    move: "Sanft. Nicht durchziehen.",
   },
   strong: {
     id: "pain-strong",
     tint: "luteal",
     band: "Stark",
     kicker: "Stark",
-    lines: ["Heute ist ein kleiner Tag.", "Das ist die Ansage, kein Ausrutscher."],
+    lines: ["Der Schmerz ist stark.", "Heute wenig. Keine harte Einheit."],
     food: "Was leicht bleibt. Wärme.",
-    move: "Liegen oder ganz wenig. Kein hohes Tempo.",
+    move: "Liegen oder ganz wenig.",
   },
   out: {
     id: "pain-out",
     tint: "menstruation",
     band: "Schonung",
     kicker: "Schonung",
-    lines: ["Heute ist Schonung.", "Du musst nichts beweisen."],
-    food: "Was ankommt. Jemanden bitten ist erlaubt.",
-    move: "Keine Einheit. Wärme, liegen, Hilfe.",
+    lines: ["Heute ist Schonung.", "Keine Einheit. Bitte um Hilfe, wenn du sie brauchst."],
+    food: "Was ankommt.",
+    move: "Keine Einheit. Wärme und liegen.",
   },
 };
 
@@ -267,7 +240,7 @@ function menopauseVoice(log?: DayLog): (Voice & { tint: TintKey; band: string })
       tint: "ovulation",
       band: "Hitze",
       kicker: "Hitze",
-      lines: ["Hitze ist heute der Rahmen.", "Plane kürzer. Schichten. Raus können."],
+      lines: ["Heute ist Hitze da.", "Plane kürzer. Zieh dich in Schichten an."],
       food: "Leichter essen, mehr Wasser.",
       move: "Nichts in engen, warmen Räumen. Ein kurzer Gang an die Luft.",
     };
@@ -278,10 +251,7 @@ function menopauseVoice(log?: DayLog): (Voice & { tint: TintKey; band: string })
       tint: "luteal",
       band: "Schlaf",
       kicker: "Schlaf",
-      lines: [
-        "Der Schlaf war dünn. Der Tag wird es auch.",
-        "Nichts davon ist eine Charakterfrage.",
-      ],
+      lines: ["Du hast wenig geschlafen.", "Plane den Tag kürzer."],
       food: "Regelmäßig, nichts Schweres am Morgen.",
       move: "Später anfangen. Eine kleine Runde, wenn überhaupt.",
     };
@@ -292,7 +262,7 @@ function menopauseVoice(log?: DayLog): (Voice & { tint: TintKey; band: string })
       tint: "menstruation",
       band: "Roh",
       kicker: "Stimmung",
-      lines: ["Die Stimmung ist roh. Nimm sie als Wetter.", "Keine großen Schnitte heute."],
+      lines: ["Die Stimmung ist dünn.", "Heute keine großen Pläne."],
       food: "Was tröstet, ohne dass du dich erklären musst.",
       move: "Wenig. Ein Spaziergang nur, wenn er guttut.",
     };
@@ -303,7 +273,7 @@ function menopauseVoice(log?: DayLog): (Voice & { tint: TintKey; band: string })
       tint: "luteal",
       band: "Dünn",
       kicker: "Stimmung",
-      lines: ["Dünn, nicht dramatisch.", "Halt den Tag kurz und konkret."],
+      lines: ["Die Stimmung ist dünn.", "Plane den Tag kurz."],
       food: "Eine richtige Mahlzeit, dann Schluss.",
       move: "Sanft und kurz.",
     };
@@ -312,14 +282,11 @@ function menopauseVoice(log?: DayLog): (Voice & { tint: TintKey; band: string })
     return {
       id: "meno-steady",
       tint: "follicular",
-      band: "Tragbar",
-      kicker: "Tragbar",
-      lines: [
-        "Heute fühlt sich brauchbar an.",
-        "Nutze das, ohne einen neuen Rhythmus zu verkünden.",
-      ],
-      food: "Was du magst. Kein Beweis, dass alles vorbei ist.",
-      move: "Eine klare Einheit, solange es hält.",
+      band: "Stabil",
+      kicker: "Stabil",
+      lines: ["Heute geht es dir ganz gut.", "Eine klare Einheit passt."],
+      food: "Was du magst.",
+      move: "Eine klare Einheit, solange es sich gut anfühlt.",
     };
   }
   return null;
@@ -390,11 +357,11 @@ export function stanceFor(profile: Profile, today: Date, log?: DayLog): Stance {
         detail: dated,
         detailTone: "quiet",
         lines: [
-          "Ich leite heute nichts aus einem Zyklus ab.",
+          "Ich rechne heute keinen Zyklus.",
           "Schlaf, Hitze, Stimmung – wie geht's dir?",
         ],
         food: "Iss, wonach dir ist. Bei Hitze leichter, mehr Wasser.",
-        move: "Bewegung, die heute geht. Kein Plan, der sicher tut.",
+        move: "Bewegung, die heute geht. Sicher ist das nicht.",
       };
     }
     return { ...felt, detail: dated, detailTone: "quiet" };
@@ -451,10 +418,10 @@ export function tintHex(tint: TintKey) {
 
 export function monthCaption(profile: Profile, bands: string[]) {
   if (profile.persona === "menopause") {
-    return "Keine berechnete Phase. Die Farbe kommt von dem, was du heute einträgst.";
+    return "Keine berechnete Phase. Ich nehme Schlaf, Hitze und Stimmung.";
   }
   if (profile.persona === "pain") {
-    return "Die Farbe ist ungefähr. Oben zählt, was dir heute guttut.";
+    return "Die Phase ist ungefähr. Heute zählt, was du einträgst.";
   }
   if (!profile.lastPeriodStart) {
     return "Trag deinen letzten Periodenstart ein, dann sehe ich deine Phase.";

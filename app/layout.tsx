@@ -16,8 +16,8 @@ const figtree = Figtree({
 });
 
 export const metadata: Metadata = {
-  title: "Fravia – Kalenderplanung im Einklang mit deinem Zyklus",
-  description: "für dich, im Einklang mit deinem Zyklus.",
+  title: "Fravia – Kalender nach deinem Zyklus",
+  description: "Termine, Sport und Pausen, passend zu deiner Phase.",
   applicationName: "Fravia",
   appleWebApp: {
     capable: true,

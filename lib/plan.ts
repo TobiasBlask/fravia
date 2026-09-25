@@ -11,6 +11,7 @@ export type Proposal = {
   kind: EventKind | "todo";
   title: string;
   time?: string;
+  end?: string;
   note?: string;
   fixed: boolean;
 };
@@ -33,32 +34,37 @@ export function openingLine(profile: Profile, today: Date, logs: Record<string, 
   if (profile.persona === "pill") {
     const withEnergy = days.some((day) => logs[iso(day)]?.energy);
     return withEnergy
-      ? `Diese Woche richte ich mich nach der Energie, die du eingetragen hast. Schwere Einheiten lege ich auf ${pair}.`
-      : `Diese Woche halte ich sanft. Tragbare Tage sind ${pair}.`;
+      ? `Ich nehme die Energie, die du eingetragen hast. Für Sport passen ${pair}.`
+      : `Diese Woche plane ich vorsichtig. Für leichtere Einheiten passen ${pair}.`;
   }
   if (profile.persona === "pain") {
     if (sport.length === 0) {
-      return "Diese Woche ist der Schmerz stark. Eine harte Einheit lege ich nicht. Erholung, kurz und früh, wenn du magst.";
+      return "Der Schmerz ist diese Woche stark. Eine harte Einheit lege ich nicht.";
     }
     const blocked = days.some((day) => hardPain(logs[iso(day)]));
     return blocked
-      ? `Diese Woche halte ich es kurz und früh. Wo der Schmerz stark ist, lege ich keine harte Einheit. ${cap(pair)} bleiben möglich.`
-      : `Diese Woche trägt dich ein kleineres Maß. Kurze Einheiten passen ${pair}.`;
+      ? `Wo der Schmerz stark ist, lege ich keine harte Einheit. Für kurze Einheiten passen ${pair}.`
+      : `Diese Woche lieber kürzer. Für Sport passen ${pair}.`;
   }
   if (profile.persona === "menopause") {
-    return `Die nächsten Tage sind eine Schätzung, kein Zyklus. ${cap(pair)} wären möglich – sicher ist das nicht.`;
+    return `Das ist eine Schätzung, kein Zyklus. ${cap(pair)} wären möglich. Sicher ist das nicht.`;
   }
-  const top = sport[0] ? dayMark(profile, sport[0].date).tint : dayMark(profile, today, logs[iso(today)]).tint;
-  if (top === "ovulation") {
-    return `Diese Woche trägt dich die Ovulation. Schwere Einheiten und eine Feier passen ${pair}.`;
+  const now = dayMark(profile, today, logs[iso(today)]).tint;
+  const top = sport[0] ? dayMark(profile, sport[0].date).tint : now;
+  if (now === "menstruation") {
+    return "Du bist in der Menstruation. Ruhe und Wärme passen. Schwere Einheiten lasse ich weg.";
   }
-  if (top === "follicular") {
-    return `Diese Woche trägt dich der Follikel. Schwere Einheiten passen ${pair}.`;
+  if (now === "luteal" && top !== "ovulation" && top !== "follicular") {
+    return `Du bist in der Lutealphase. Für leichtere Einheiten passen ${pair}. Hartes Training nicht.`;
   }
-  if (top === "luteal") {
-    return `Diese Woche trägt dich die Lutealphase. Ein kleineres Maß passt ${pair}, hartes Training nicht.`;
-  }
-  return "Diese Woche trägt dich die Menstruation. Ruhe und Wärme passen, schwere Einheiten lasse ich liegen.";
+  const phase = now === "ovulation"
+    ? "Du bist in der Ovulation."
+    : now === "luteal"
+      ? "Du bist in der Lutealphase."
+      : "Du bist in der Follikelphase.";
+  return top === "ovulation"
+    ? `${phase} Für Sport und eine Feier passen ${pair}.`
+    : `${phase} Für Sport passen ${pair}.`;
 }
 
 export function planSentence(
@@ -99,6 +105,7 @@ export function planSentence(
           kind: place.kind,
           title,
           time: place.time,
+          end: place.end,
           note: place.note,
           fixed: true,
         },
@@ -124,6 +131,7 @@ export function planSentence(
     kind: place.kind,
     title,
     time: place.time,
+    end: place.end,
     note: place.note,
     fixed: false,
   });
@@ -278,15 +286,24 @@ function hardPain(log?: DayLog) {
   return log?.pain === "strong" || log?.pain === "out";
 }
 
-function placement(goal: Goal, profile: Profile): { kind: EventKind | "todo"; time?: string; note?: string } {
+function placement(goal: Goal, profile: Profile): { kind: EventKind | "todo"; time?: string; end?: string; note?: string } {
+  const pain = profile.persona === "pain";
   if (goal === "sport") {
-    return profile.persona === "pain"
-      ? { kind: "sport", time: "08:30", note: "Kurz und früh." }
-      : { kind: "sport" };
+    return pain
+      ? { kind: "sport", time: "08:30", end: "09:15", note: "Kurz und früh." }
+      : { kind: "sport", time: "18:00", end: "19:00" };
   }
   if (goal === "geburtstag") return { kind: "geburtstag" };
-  if (goal === "feier" || goal === "treffen") return { kind: "termin" };
-  return { kind: "todo" };
+  if (goal === "feier") return { kind: "termin", time: "19:00", end: "22:00" };
+  if (goal === "treffen") return { kind: "termin", time: "18:00", end: "19:30" };
+  if (goal === "erholung") {
+    return pain
+      ? { kind: "termin", time: "16:00", end: "16:30", note: "Kurz." }
+      : { kind: "termin", time: "16:00", end: "17:00" };
+  }
+  return pain
+    ? { kind: "todo", time: "09:00", end: "10:00" }
+    : { kind: "todo", time: "09:30", end: "11:30" };
 }
 
 function titleFor(goal: Goal, text: string) {
@@ -301,33 +318,35 @@ function titleFor(goal: Goal, text: string) {
 
 function fixedAdvice(profile: Profile, date: Date, log: DayLog | undefined, goal: Goal) {
   const day = `${date.getDate()}.`;
-  const fit = fits(profile, date, log);
-  const lead = profile.persona === "menopause"
-    ? `Der ${day} bleibt, wo er ist. Ich schätze nur: ${fit.fit} ${fit.skip} Sicher ist das nicht.`
-    : `Der ${day} bleibt, wo er ist. ${fit.fit} ${fit.skip}`;
-  return `${lead} Soll ich ${titleFor(goal, goal)} trotzdem auf den ${day} legen?`;
+  const fit = fits(profile, date, log, goal);
+  const guess = profile.persona === "menopause" ? " Sicher ist das nicht." : "";
+  return `Den ${day} verschiebe ich nicht. ${fit.fit} ${fit.skip}${guess} Soll ich ${titleFor(goal, goal)} trotzdem auf den ${day} legen?`;
 }
 
-function fits(profile: Profile, date: Date, log?: DayLog) {
+function fits(profile: Profile, date: Date, log: DayLog | undefined, goal: Goal) {
+  const day = `${date.getDate()}.`;
   if (profile.persona === "pain" && hardPain(log)) {
-    return { fit: "Erholung und Wärme passen.", skip: "Sport und alles Harte lasse ich weg." };
+    return { fit: `Am ${day} ist der Schmerz stark.`, skip: "Erholung passt. Sport und alles Harte lasse ich weg." };
   }
   if (profile.persona === "pill") {
     const band = dayMark(profile, date).band;
-    if (log?.energy && log.energy >= 4) return { fit: "Du hast an dem Tag Energie eingetragen – Sport und Fokus passen.", skip: "Eine Überladung lasse ich weg." };
-    if (band === "Pause") return { fit: "Eine kleinere Aufgabe und Erholung passen.", skip: "Eine harte Einheit lasse ich weg." };
-    return { fit: "Arbeit und ein normales Pensum passen.", skip: "Eine harte Heldeneinheit lasse ich weg." };
+    if (log?.energy && log.energy >= 4) return { fit: `Am ${day} hast du Energie eingetragen. Sport und Fokus passen.`, skip: "Zu viel an einem Tag lasse ich weg." };
+    if (band === "Pause") return { fit: `Am ${day} ist die Pause.`, skip: "Eine harte Einheit lasse ich weg." };
+    return { fit: `Am ${day} passt ein normales Pensum.`, skip: "Eine harte Einheit lasse ich weg." };
   }
   if (profile.persona === "menopause") {
-    if (log?.heat === "hot" || log?.sleep === "short") return { fit: "Eher kurz und leicht.", skip: "Eine lange Feier lasse ich weg." };
-    return { fit: "Eine klare Aufgabe kann passen.", skip: "Ich tue nicht so, als wäre die Phase sicher." };
+    if (log?.heat === "hot" || log?.sleep === "short") return { fit: `Am ${day} lieber kurz und leicht.`, skip: "Eine lange Feier lasse ich weg." };
+    return { fit: `Am ${day} kann eine klare Aufgabe passen.`, skip: "Sicher ist die Schätzung nicht." };
   }
   const tint = dayMark(profile, date).tint;
-  if (tint === "menstruation") return { fit: "Ruhe und Wärme passen.", skip: "Sport, Feier und tiefen Fokus lasse ich weg." };
-  if (tint === "luteal") return { fit: "Fokus in einem kleineren Maß passt.", skip: "Eine harte Einheit lasse ich weg." };
-  if (tint === "ovulation") return { fit: "Sport, Fokus und eine Feier passen.", skip: "Dich klein halten musst du nicht." };
-  if (tint === "follicular") return { fit: "Sport und tiefer Fokus passen.", skip: "Eine Überladung lasse ich weg." };
-  return { fit: "Trag den Periodenstart ein, dann kann ich den Tag besser lesen.", skip: "" };
+  if (tint === "menstruation") return { fit: `Am ${day} ist die Menstruation. Ruhe und Wärme passen.`, skip: "Sport, Feier und langen Fokus lasse ich weg." };
+  if (tint === "luteal") {
+    const practical = goal === "feier" || goal === "geburtstag" ? "Feier kürzer und früher." : "Plane kürzer und früher.";
+    return { fit: `Am ${day} ist die Lutealphase. ${practical}`, skip: "Eine harte Einheit lasse ich weg." };
+  }
+  if (tint === "ovulation") return { fit: `Am ${day} ist die Ovulation. Sport, Fokus und eine Feier passen.`, skip: "" };
+  if (tint === "follicular") return { fit: `Am ${day} ist die Follikelphase. Sport und Fokus passen.`, skip: "Zu viel an einem Tag lasse ich weg." };
+  return { fit: "Trag den Periodenstart ein, dann sage ich die Phase.", skip: "" };
 }
 
 function whyLine(profile: Profile, date: Date, log: DayLog | undefined, goal: Goal) {
@@ -336,22 +355,24 @@ function whyLine(profile: Profile, date: Date, log: DayLog | undefined, goal: Go
     return `${cap(name)} wäre möglich. Es ist eine Schätzung. Soll ich ${titleFor(goal, goal)} dahin legen?`;
   }
   if (profile.persona === "pill") {
-    const energy = log?.energy ? ` Du hast dort Energie ${log.energy} eingetragen.` : " Ohne eingetragene Energie halte ich die Woche sanft.";
-    return `${cap(name)} passt.${energy} Soll ich ${titleFor(goal, goal)} auf ${name} legen?`;
+    const energy = log?.energy
+      ? `Du hast dort Energie ${log.energy} eingetragen.`
+      : "Du hast dort keine Energie eingetragen, also plane ich vorsichtig.";
+    return `${cap(name)} passt. ${energy} Soll ich ${titleFor(goal, goal)} auf ${name} legen?`;
   }
   if (profile.persona === "pain") {
     return `${cap(name)}, kurz und früh. An Tagen mit starkem Schmerz lege ich nichts Hartes. Soll ich ${titleFor(goal, goal)} auf ${name} legen?`;
   }
   const tint = dayMark(profile, date).tint;
   const because = tint === "ovulation"
-    ? "Die Ovulation trägt den Tag."
+    ? "Du bist in der Ovulation."
     : tint === "follicular"
-      ? "Der Follikel trägt den Tag."
+      ? "Du bist in der Follikelphase."
       : tint === "luteal"
-        ? "Die Lutealphase will ein kleineres Maß."
+        ? "Du bist in der Lutealphase. Nimm es kürzer."
         : tint === "menstruation"
-          ? "Die Menstruation will Ruhe."
-          : "Dahin lege ich es.";
+          ? "Du bist in der Menstruation. Ruhe passt besser."
+          : "Trag den Periodenstart ein, dann sage ich die Phase.";
   return `${cap(name)} passt. ${because} Soll ich ${titleFor(goal, goal)} auf ${name} legen?`;
 }
 

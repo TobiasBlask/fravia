@@ -7,7 +7,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { clearGuest, guestOn, readGuest, setGuestOn, writeGuest, type GuestStore } from "@/lib/guest";
 import { seriesDates } from "@/lib/series";
-import { iso, startOfMonth } from "@/lib/dates";
+import { addDays, daysBetween, iso, parseISODate, startOfMonth } from "@/lib/dates";
 import type { DayEvent, DayLog, DayTodo, EventKind, Profile, SeriesFreq } from "@/lib/types";
 
 const blank = (): GuestStore => ({
@@ -27,6 +27,7 @@ export function useJournal() {
   const addEventMut = useMutation(api.life.addEvent);
   const deleteEventMut = useMutation(api.life.deleteEvent);
   const moveEventMut = useMutation(api.life.moveEvent);
+  const patchEventMut = useMutation(api.life.patchEvent);
   const addTodoMut = useMutation(api.life.addTodo);
   const toggleTodoMut = useMutation(api.life.toggleTodo);
   const deleteTodoMut = useMutation(api.life.deleteTodo);
@@ -55,8 +56,8 @@ export function useJournal() {
   const [focus, setFocus] = useState<string | null>(null);
   const today = useMemo(() => new Date(), []);
   const month = startOfMonth(today);
-  const rangeStart = iso(new Date(month.getFullYear(), month.getMonth() - 6, 1));
-  const rangeEnd = iso(new Date(month.getFullYear(), month.getMonth() + 7, 0));
+  const rangeStart = iso(new Date(month.getFullYear(), month.getMonth() - 12, 1));
+  const rangeEnd = iso(new Date(month.getFullYear(), month.getMonth() + 18, 0));
 
   useEffect(() => {
     setGuestFlag(guestOn());
@@ -199,7 +200,10 @@ export function useJournal() {
     kind: EventKind;
     date: string;
     time?: string;
+    end?: string;
     note?: string;
+    location?: string;
+    remind?: number;
     freq: SeriesFreq;
     until?: string;
   }) {
@@ -214,8 +218,7 @@ export function useJournal() {
         date,
         freq,
         seriesId,
-        ...(input.time ? { time: input.time } : {}),
-        ...(input.note ? { note: input.note } : {}),
+        ...eventExtras(input),
       }));
       commit({ ...device, events: [...device.events, ...rows] });
       return;
@@ -237,15 +240,94 @@ export function useJournal() {
     await deleteEventMut({ id: id as Id<"events">, series });
   }
 
-  async function moveEvent(id: string, date: string) {
+  async function moveEvent(
+    id: string,
+    date: string,
+    extra?: { time?: string; end?: string; series?: boolean },
+  ) {
     if (guestMode) {
+      const row = device.events.find((item) => item.id === id);
+      if (!row) return;
+      const clock = {
+        ...(extra?.time !== undefined ? { time: extra.time || undefined } : {}),
+        ...(extra?.end !== undefined ? { end: extra.end || undefined } : {}),
+      };
+      if (extra?.series && row.freq !== "none") {
+        const delta = daysBetween(parseISODate(date), parseISODate(row.date));
+        commit({
+          ...device,
+          events: device.events.map((item) =>
+            item.seriesId === row.seriesId
+              ? { ...item, ...clock, date: iso(addDays(parseISODate(item.date), delta)) }
+              : item,
+          ),
+        });
+        return;
+      }
       commit({
         ...device,
-        events: device.events.map((item) => (item.id === id ? { ...item, date } : item)),
+        events: device.events.map((item) => (item.id === id ? { ...item, ...clock, date } : item)),
       });
       return;
     }
-    await moveEventMut({ id: id as Id<"events">, date });
+    await moveEventMut({
+      id: id as Id<"events">,
+      date,
+      ...(extra?.time !== undefined ? { time: extra.time } : {}),
+      ...(extra?.end !== undefined ? { end: extra.end } : {}),
+      ...(extra?.series ? { series: true } : {}),
+    });
+  }
+
+  async function patchEvent(input: {
+    id: string;
+    series: boolean;
+    title?: string;
+    kind?: EventKind;
+    date?: string;
+    time?: string;
+    end?: string;
+    note?: string;
+    location?: string;
+    remind?: number;
+  }) {
+    if (guestMode) {
+      const row = device.events.find((item) => item.id === input.id);
+      if (!row) return;
+      const apply = (item: DayEvent, shift: number): DayEvent => ({
+        ...item,
+        ...(input.title ? { title: input.title } : {}),
+        ...(input.kind ? { kind: input.kind } : {}),
+        ...(input.time !== undefined ? { time: input.time || undefined } : {}),
+        ...(input.end !== undefined ? { end: input.end || undefined } : {}),
+        ...(input.note !== undefined ? { note: input.note || undefined } : {}),
+        ...(input.location !== undefined ? { location: input.location || undefined } : {}),
+        ...(input.remind !== undefined ? { remind: input.remind || undefined } : {}),
+        ...(input.date ? { date: iso(addDays(parseISODate(item.date), shift)) } : {}),
+      });
+      const delta = input.series && input.date ? daysBetween(parseISODate(input.date), parseISODate(row.date)) : 0;
+      commit({
+        ...device,
+        events: device.events.map((item) => {
+          if (input.series && item.seriesId === row.seriesId) return apply(item, delta);
+          if (!input.series && item.id === input.id) return apply(item, 0);
+          return item;
+        }),
+      });
+      return;
+    }
+    await patchEventMut({
+      id: input.id as Id<"events">,
+      series: input.series,
+      ...(input.title ? { title: input.title } : {}),
+      ...(input.kind ? { kind: input.kind } : {}),
+      ...(input.date ? { date: input.date } : {}),
+      ...(input.time !== undefined ? { time: input.time } : {}),
+      ...(input.end !== undefined ? { end: input.end } : {}),
+      ...(input.note !== undefined ? { note: input.note } : {}),
+      ...(input.location !== undefined ? { location: input.location } : {}),
+      ...(input.remind !== undefined ? { remind: input.remind } : {}),
+    });
   }
 
   async function addTodo(input: {
@@ -376,7 +458,10 @@ export function useJournal() {
         date: event.date,
         freq: "none",
         ...(event.time ? { time: event.time } : {}),
+        ...(event.end ? { end: event.end } : {}),
         ...(event.note ? { note: event.note } : {}),
+        ...(event.location ? { location: event.location } : {}),
+        ...(event.remind ? { remind: event.remind } : {}),
       });
     }
     for (const todo of stored.todos) {
@@ -438,6 +523,7 @@ export function useJournal() {
     addEvent,
     deleteEvent,
     moveEvent,
+    patchEvent,
     addTodo,
     toggleTodo,
     deleteTodo,
@@ -462,6 +548,9 @@ function mapEvent(row: {
   kind: EventKind;
   date: string;
   time?: string;
+  end?: string;
+  location?: string;
+  remind?: number;
   note?: string;
   freq: string;
   seriesId: string;
@@ -471,10 +560,23 @@ function mapEvent(row: {
     title: row.title,
     kind: row.kind,
     date: row.date,
-    time: row.time,
-    note: row.note,
+    ...(row.time ? { time: row.time } : {}),
+    ...(row.end ? { end: row.end } : {}),
+    ...(row.location ? { location: row.location } : {}),
+    ...(row.remind ? { remind: row.remind } : {}),
+    ...(row.note ? { note: row.note } : {}),
     freq: row.freq,
     seriesId: row.seriesId,
+  };
+}
+
+function eventExtras(input: { time?: string; end?: string; note?: string; location?: string; remind?: number }) {
+  return {
+    ...(input.time ? { time: input.time } : {}),
+    ...(input.end ? { end: input.end } : {}),
+    ...(input.note ? { note: input.note } : {}),
+    ...(input.location ? { location: input.location } : {}),
+    ...(input.remind ? { remind: input.remind } : {}),
   };
 }
 

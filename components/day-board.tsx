@@ -31,6 +31,9 @@ export function DayBoard({
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<EventKind>("termin");
   const [time, setTime] = useState("");
+  const [end, setEnd] = useState("");
+  const [location, setLocation] = useState("");
+  const [remind, setRemind] = useState(0);
   const [note, setNote] = useState("");
   const [freq, setFreq] = useState<SeriesFreq>("none");
   const [until, setUntil] = useState("");
@@ -70,8 +73,9 @@ export function DayBoard({
           <li key={event.id} className="flex items-start justify-between gap-3 text-sm">
             <div>
               <p>
-                {event.time ? `${event.time} ` : ""}
+                {event.time ? `${event.time}${event.end ? `–${event.end}` : ""} ` : ""}
                 {event.title}
+                {event.location ? ` · ${event.location}` : ""}
               </p>
               <p className="text-ink/60">
                 {kindLabel[event.kind]}
@@ -135,6 +139,9 @@ export function DayBoard({
             date,
             freq: kind === "geburtstag" && freq === "none" ? "yearly" : freq,
             ...(time ? { time } : {}),
+            ...(end ? { end } : {}),
+            ...(location ? { location } : {}),
+            ...(remind ? { remind } : {}),
             ...(note ? { note } : {}),
             ...(until ? { until } : {}),
           });
@@ -161,7 +168,16 @@ export function DayBoard({
           className="min-h-12 border-b border-ink/30 bg-transparent"
         />
         <div className="flex flex-wrap gap-3">
-          <input type="time" value={time} onChange={(event) => setTime(event.target.value)} className="min-h-12 border-b border-ink/30 bg-transparent" />
+          <input type="time" aria-label="Von" value={time} onChange={(event) => setTime(event.target.value)} className="min-h-12 border-b border-ink/30 bg-transparent" />
+          <input type="time" aria-label={t("until")} value={end} onChange={(event) => setEnd(event.target.value)} className="min-h-12 border-b border-ink/30 bg-transparent" />
+          <input value={location} onChange={(event) => setLocation(event.target.value)} placeholder={t("place")} className="min-h-12 border-b border-ink/30 bg-transparent" />
+          <select aria-label={t("remind")} value={remind} onChange={(event) => setRemind(Number(event.target.value))} className="min-h-12 bg-transparent">
+            <option value={0}>{t("noRemind")}</option>
+            <option value={10}>10 min</option>
+            <option value={30}>30 min</option>
+            <option value={60}>1 h</option>
+            <option value={1440}>1 Tag</option>
+          </select>
           <select value={freq} onChange={(event) => setFreq(event.target.value as SeriesFreq)} className="min-h-12 bg-transparent">
             {FREQS.map((item) => (
               <option key={item} value={item}>{freqLabel[item]}</option>
