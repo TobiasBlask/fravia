@@ -37,6 +37,8 @@ export function EventSheet({
   const [until, setUntil] = useState("");
   const [busy, setBusy] = useState(false);
   const shared = Boolean(event?.shared);
+  const fromGoogle = Boolean(event?.id.startsWith("gcal:"));
+  const locked = shared || fromGoogle;
 
   const kindLabel: Record<EventKind, string> = {
     termin: t("appointment"),
@@ -57,7 +59,7 @@ export function EventSheet({
   };
 
   async function save(series: boolean) {
-    if (!title.trim() || shared) return;
+    if (!title.trim() || locked) return;
     setBusy(true);
     const clock = allDay ? { time: "", end: "" } : { time: start, end: end > start ? end : endOf(start) };
     try {
@@ -102,28 +104,28 @@ export function EventSheet({
         </div>
         <div className="flex flex-wrap gap-2">
           {KINDS.map((item) => (
-            <button key={item} type="button" disabled={shared} className={`min-h-10 px-3 text-sm ${kind === item ? "bg-ink text-paper" : "ring-1 ring-ink/20"}`} onClick={() => setKind(item)}>
+            <button key={item} type="button" disabled={locked} className={`min-h-10 px-3 text-sm ${kind === item ? "bg-ink text-paper" : "ring-1 ring-ink/20"}`} onClick={() => setKind(item)}>
               {kindLabel[item]}
             </button>
           ))}
         </div>
-        <input value={title} disabled={shared} onChange={(input) => setTitle(input.target.value)} placeholder={t("title")} className="min-h-12 border-b border-ink/30 bg-transparent font-serif text-2xl" />
+        <input value={title} disabled={locked} onChange={(input) => setTitle(input.target.value)} placeholder={t("title")} className="min-h-12 border-b border-ink/30 bg-transparent font-serif text-2xl" />
         <label className="flex min-h-12 items-center gap-2 text-sm">
-          <input type="checkbox" checked={allDay} disabled={shared} onChange={(input) => setAllDay(input.target.checked)} />
+          <input type="checkbox" checked={allDay} disabled={locked} onChange={(input) => setAllDay(input.target.checked)} />
           {t("allDay")}
         </label>
-        <input type="date" value={when} disabled={shared} onChange={(input) => setWhen(input.target.value)} className="min-h-12 border-b border-ink/30 bg-transparent" />
+        <input type="date" value={when} disabled={locked} onChange={(input) => setWhen(input.target.value)} className="min-h-12 border-b border-ink/30 bg-transparent" />
         {allDay ? null : (
           <div className="flex gap-3">
-            <input type="time" aria-label="Von" value={start} disabled={shared} onChange={(input) => setStart(input.target.value)} className="min-h-12 flex-1 border-b border-ink/30 bg-transparent" />
-            <input type="time" aria-label={t("until")} value={end} disabled={shared} onChange={(input) => setEnd(input.target.value)} className="min-h-12 flex-1 border-b border-ink/30 bg-transparent" />
+            <input type="time" aria-label="Von" value={start} disabled={locked} onChange={(input) => setStart(input.target.value)} className="min-h-12 flex-1 border-b border-ink/30 bg-transparent" />
+            <input type="time" aria-label={t("until")} value={end} disabled={locked} onChange={(input) => setEnd(input.target.value)} className="min-h-12 flex-1 border-b border-ink/30 bg-transparent" />
           </div>
         )}
-        <input value={location} disabled={shared} onChange={(input) => setLocation(input.target.value)} placeholder={t("place")} className="min-h-12 border-b border-ink/30 bg-transparent" />
-        <input value={note} disabled={shared} onChange={(input) => setNote(input.target.value)} placeholder={t("note")} className="min-h-12 border-b border-ink/30 bg-transparent" />
+        <input value={location} disabled={locked} onChange={(input) => setLocation(input.target.value)} placeholder={t("place")} className="min-h-12 border-b border-ink/30 bg-transparent" />
+        <input value={note} disabled={locked} onChange={(input) => setNote(input.target.value)} placeholder={t("note")} className="min-h-12 border-b border-ink/30 bg-transparent" />
         <label className="grid gap-1 text-sm">
           {t("remind")}
-          <select value={remind} disabled={shared} onChange={(input) => setRemind(Number(input.target.value))} className="min-h-12 bg-transparent">
+          <select value={remind} disabled={locked} onChange={(input) => setRemind(Number(input.target.value))} className="min-h-12 bg-transparent">
             {REMINDERS.map((minutes) => (
               <option key={minutes} value={minutes}>{remindLabel(minutes, t("noRemind"))}</option>
             ))}
@@ -141,7 +143,8 @@ export function EventSheet({
             ) : null}
           </div>
         )}
-        {shared ? null : (
+        {fromGoogle ? <p className="text-base">Das liegt in Google. Den Tag änderst du mit Verschieben.</p> : null}
+        {locked ? null : (
           <div className="grid gap-2">
             <button type="button" disabled={busy} className="min-h-12 bg-ink text-paper" onClick={() => void save(false)}>
               {event && event.freq !== "none" ? t("onlyThis") : t("save")}

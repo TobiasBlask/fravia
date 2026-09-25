@@ -8,6 +8,9 @@
  * @module
  */
 
+import type * as google from "../google.js";
+import type * as googleApi from "../googleApi.js";
+import type * as googleTime from "../googleTime.js";
 import type * as journal from "../journal.js";
 import type * as life from "../life.js";
 import type * as users from "../users.js";
@@ -19,6 +22,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  google: typeof google;
+  googleApi: typeof googleApi;
+  googleTime: typeof googleTime;
   journal: typeof journal;
   life: typeof life;
   users: typeof users;

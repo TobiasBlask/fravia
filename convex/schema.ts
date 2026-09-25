@@ -22,6 +22,12 @@ export default defineSchema({
     email: v.optional(v.string()),
   }).index("by_token", ["tokenIdentifier"]),
 
+  googleLinks: defineTable({
+    userId: v.id("users"),
+    refreshToken: v.optional(v.string()),
+    oauthState: v.optional(v.string()),
+  }).index("by_user", ["userId"]),
+
   dayLogs: defineTable({
     userId: v.id("users"),
     date: v.string(),

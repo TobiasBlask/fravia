@@ -3,6 +3,7 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { GoogleConnect } from "@/components/google-connect";
 import { useLang } from "@/components/lang";
 import type { useJournal } from "@/components/use-journal";
 import { parseCycleImport, parseIcs } from "@/lib/ics";
@@ -87,6 +88,12 @@ export function SettingsView({ journal }: { journal: ReturnType<typeof useJourna
       <Link href="/" className="inline-flex min-h-12 items-center text-sm">{t("home")}</Link>
       <h1 className="mt-4 font-serif text-5xl">{t("settings")}</h1>
       <p className="mt-4 max-w-lg text-base leading-snug">{t("help")}</p>
+      <section className="mt-10">
+        <h2 className="text-[11px] uppercase tracking-[0.16em]">Google</h2>
+        <div className="mt-3">
+          <GoogleConnect />
+        </div>
+      </section>
 
       <section className="mt-10">
         <h2 className="text-[11px] uppercase tracking-[0.16em]">{t("language")}</h2>

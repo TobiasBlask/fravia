@@ -1,12 +1,15 @@
 "use client";
 
 import { useClerk } from "@clerk/nextjs";
+import { useAction, useQuery } from "convex/react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { api } from "@/convex/_generated/api";
 import { DayBoard } from "@/components/day-board";
 import { DayCheckin } from "@/components/day-checkin";
 import { EventSheet } from "@/components/event-sheet";
 import { ConsequenceLead, WeekAsk } from "@/components/first-screen";
+import { GoogleConnect } from "@/components/google-connect";
 import { useLang } from "@/components/lang";
 import { MonthStage } from "@/components/month-stage";
 import { TimeGrid } from "@/components/time-grid";
@@ -44,14 +47,56 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
   const [skipped, setSkipped] = useState<string[]>([]);
   const [placing, setPlacing] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [googleEvents, setGoogleEvents] = useState<DayEvent[] | null>(null);
+  const [googleTick, setGoogleTick] = useState(0);
+  const [googleNote, setGoogleNote] = useState<string | null>(null);
+  const googleStatus = useQuery(api.google.status);
+  const listGoogle = useAction(api.googleApi.events);
+  const createGoogle = useAction(api.googleApi.create);
+  const moveGoogle = useAction(api.googleApi.move);
   const stageRef = useRef<HTMLDivElement>(null);
   const view = picked ?? (wide ? "week" : "day");
+  const shown = useMemo(() => {
+    if (!googleEvents) return journal.events;
+    const limit = iso(addDays(today, 14));
+    const kept = journal.events.filter((event) => event.date < todayIso || event.date >= limit);
+    return [...kept, ...googleEvents];
+  }, [googleEvents, journal.events, today, todayIso]);
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const event of journal.events) map[event.date] = (map[event.date] ?? 0) + 1;
+    for (const event of shown) map[event.date] = (map[event.date] ?? 0) + 1;
     for (const todo of journal.todos) map[todo.date] = (map[todo.date] ?? 0) + 1;
     return map;
-  }, [journal.events, journal.todos]);
+  }, [shown, journal.todos]);
+
+  useEffect(() => {
+    if (!googleStatus?.connected) {
+      setGoogleEvents(null);
+      setGoogleNote(null);
+      return;
+    }
+    let cancel = false;
+    void listGoogle({ today: todayIso })
+      .then((result) => {
+        if (cancel) return;
+        if (!result.connected || result.failed) {
+          setGoogleEvents(null);
+          setGoogleNote(result.failed ? "Google hat nicht geantwortet." : null);
+          return;
+        }
+        setGoogleNote(null);
+        setGoogleEvents(result.events);
+      })
+      .catch(() => {
+        if (!cancel) {
+          setGoogleEvents(null);
+          setGoogleNote("Google hat nicht geantwortet.");
+        }
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [googleStatus?.connected, googleTick, listGoogle, todayIso]);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 900px)");
@@ -129,14 +174,28 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
     if (!quick || !quickTitle.trim()) return;
     const start = quick.time;
     const end = clockOf(Math.min(minutesOf(start) + 60, 23 * 60 + 59));
-    await journal.addEvent({
-      title: quickTitle.trim(),
-      kind: "termin",
-      date: quick.date,
-      time: start,
-      end,
-      freq: "none",
-    });
+    if (googleStatus?.connected) {
+      try {
+        const result = await createGoogle({ title: quickTitle.trim(), date: quick.date, time: start, end });
+        if (!result.ok) {
+          setFailed(true);
+          return;
+        }
+      } catch {
+        setFailed(true);
+        return;
+      }
+      setGoogleTick((current) => current + 1);
+    } else {
+      await journal.addEvent({
+        title: quickTitle.trim(),
+        kind: "termin",
+        date: quick.date,
+        time: start,
+        end,
+        freq: "none",
+      });
+    }
     setSelected(quick.date);
     setCursor(parseISODate(quick.date));
     setQuick(null);
@@ -149,6 +208,16 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
     try {
       if (proposal.kind === "todo") {
         await journal.addTodo({ title: proposal.title, date: proposal.date, freq: "none" });
+      } else if (googleStatus?.connected) {
+        const result = await createGoogle({
+          title: proposal.title,
+          date: proposal.date,
+          ...(proposal.time ? { time: proposal.time } : {}),
+          ...(proposal.end ? { end: proposal.end } : {}),
+          ...(proposal.note ? { note: proposal.note } : {}),
+        });
+        if (!result.ok) throw new Error("google");
+        setGoogleTick((current) => current + 1);
       } else {
         await journal.addEvent({
           title: proposal.title,
@@ -173,7 +242,13 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
     setPlacing(true);
     setFailed(false);
     try {
-      await journal.moveEvent(id, date);
+      if (id.startsWith("gcal:")) {
+        const result = await moveGoogle({ id, date });
+        if (!result.ok) throw new Error("google");
+        setGoogleTick((current) => current + 1);
+      } else {
+        await journal.moveEvent(id, date);
+      }
       placed(date);
     } catch {
       setFailed(true);
@@ -189,25 +264,26 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
   }
 
   const horizon = iso(addDays(today, 14));
-  const soon = journal.events.filter((event) => event.date >= todayIso && event.date < horizon);
-  const asking = soon.length === 0 && (view === "day" || view === "week");
-  const lead = soon.some((event) => !event.shared) ? consequence(profile, today, journal.events, journal.logs, skipped) : null;
-  const leadEvent = lead ? journal.events.find((event) => event.id === lead.eventId) : undefined;
-  const reminders = dueReminders(journal.events, today).filter((event) => !hiddenReminders.includes(event.id));
+  const waiting = Boolean(googleStatus?.connected) && googleEvents === null && !googleNote;
+  const soon = shown.filter((event) => event.date >= todayIso && event.date < horizon);
+  const asking = !waiting && soon.length === 0 && (view === "day" || view === "week");
+  const lead = !waiting && soon.some((event) => !event.shared) ? consequence(profile, today, shown, journal.logs, skipped) : null;
+  const leadEvent = lead ? shown.find((event) => event.id === lead.eventId) : undefined;
+  const reminders = dueReminders(shown, today).filter((event) => !hiddenReminders.includes(event.id));
   const needle = query.trim().toLowerCase();
   const hits = needle
-    ? journal.events.filter((event) => [event.title, event.location, event.note].some((value) => value?.toLowerCase().includes(needle))).slice(0, 8)
+    ? shown.filter((event) => [event.title, event.location, event.note].some((value) => value?.toLowerCase().includes(needle))).slice(0, 8)
     : [];
   const anchor = parseISODate(selected);
   const gridDays = view === "week" ? weekDates(anchor) : [anchor];
   const rangeKeys = new Set(gridDays.map((date) => iso(date)));
-  const inRange = journal.events.filter((event) => rangeKeys.has(event.date));
+  const inRange = shown.filter((event) => rangeKeys.has(event.date));
   const todosInRange = journal.todos.filter((todo) => rangeKeys.has(todo.date));
   const emptyRange = (view === "day" || view === "week") && inRange.length === 0 && todosInRange.length === 0;
   const timedHere = inRange.some((event) => event.time);
   const nowMs = today.getTime();
   const upcoming = !timedHere && (view === "day" || view === "week")
-    ? journal.events
+    ? shown
         .filter((event) => {
           if (!event.time) return false;
           const [hour, minute] = event.time.split(":").map(Number);
@@ -265,6 +341,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
           <button type="button" className="hidden min-h-11 text-sm min-[900px]:inline" onClick={() => setTalk(true)}>Dialog</button>
           <button type="button" className="min-h-11 text-sm" onClick={() => journal.setRevising(true)}>{t("revise")}</button>
           <Link href="/settings" className="inline-flex min-h-11 items-center text-sm">{t("settings")}</Link>
+          <GoogleConnect />
           {journal.guestMode ? null : (
             <button type="button" className="min-h-11 text-sm" onClick={() => signOut({ redirectUrl: "/" })}>{t("signOut")}</button>
           )}
@@ -278,6 +355,8 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
             </aside>
           ) : null}
           <div ref={stageRef} className="min-[900px]:flex min-[900px]:h-[calc(100dvh-7.5rem)] min-[900px]:min-h-0 min-[900px]:flex-col min-[900px]:overflow-hidden min-[900px]:bg-paper">
+            {googleNote ? <p className="mb-3 text-sm">{googleNote}</p> : null}
+            {waiting ? <p className="font-serif text-2xl leading-tight">{t("loading")}</p> : null}
             {asking ? (
               <WeekAsk
                 profile={profile}
@@ -315,7 +394,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
                 ))}
               </div>
             ) : null}
-            {asking ? null : <>
+            {asking || waiting ? null : <>
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <input
                 type="date"
@@ -361,7 +440,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
                 </div>
                 <TimeGrid
                   days={emptyRange ? [anchor] : gridDays}
-                  events={journal.events}
+                  events={shown}
                   todos={journal.todos}
                   profile={profile}
                   logs={journal.logs}
@@ -371,6 +450,14 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
                   onOpen={(event) => { setQuick(null); setEditor({ event, date: event.date }); }}
                   onMove={(event, date, slot) => {
                     if (!event.time) return;
+                    if (event.id.startsWith("gcal:")) {
+                      void moveGoogle({ id: event.id, date }).then((result) => {
+                        if (!result.ok) return;
+                        setGoogleTick((current) => current + 1);
+                        setSelected(date);
+                      });
+                      return;
+                    }
                     const duration = minutesOf(endOf(event.time, event.end)) - minutesOf(event.time);
                     void journal.moveEvent(event.id, date, { time: slot, end: clockOf(minutesOf(slot) + duration) });
                     setSelected(date);
