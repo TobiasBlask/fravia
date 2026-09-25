@@ -206,7 +206,7 @@ export function useJournal() {
     if (!input.title.trim()) return;
     if (guestMode) {
       const seriesId = crypto.randomUUID();
-      const freq = input.kind === "geburtstag" && input.freq === "none" ? "yearly" : input.freq;
+      const freq = input.freq;
       const rows = seriesDates(input.date, freq, input.until).map((date) => ({
         id: crypto.randomUUID(),
         title: input.title.trim(),

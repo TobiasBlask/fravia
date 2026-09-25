@@ -133,7 +133,7 @@ export function DayBoard({
             title,
             kind,
             date,
-            freq,
+            freq: kind === "geburtstag" && freq === "none" ? "yearly" : freq,
             ...(time ? { time } : {}),
             ...(note ? { note } : {}),
             ...(until ? { until } : {}),

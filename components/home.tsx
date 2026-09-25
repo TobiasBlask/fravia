@@ -11,8 +11,10 @@ import type { useJournal } from "@/components/use-journal";
 import { VoiceBox } from "@/components/voice-box";
 import { Wash } from "@/components/wash";
 import { WeekStage } from "@/components/week-stage";
+import { Workbook } from "@/components/workbook";
 import { YearStage } from "@/components/year-stage";
 import { iso, parseISODate, startOfMonth } from "@/lib/dates";
+import { openingLine } from "@/lib/plan";
 import { PERSONA_LINE, stanceFor, tintHex } from "@/lib/voice";
 
 export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
@@ -24,6 +26,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
   const [cursor, setCursor] = useState(() => startOfMonth(today));
   const [selected, setSelected] = useState(todayIso);
   const [sheet, setSheet] = useState(false);
+  const [talk, setTalk] = useState(false);
   const [view, setView] = useState<"month" | "week" | "year">("month");
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -54,6 +57,12 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
     if (window.matchMedia("(max-width: 899px)").matches) setSheet(true);
   }
 
+  function placed(date: string) {
+    setSelected(date);
+    setCursor(startOfMonth(parseISODate(date)));
+    setView("month");
+  }
+
   return (
     <>
       <Wash color={color} />
@@ -82,37 +91,48 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
             {journal.guestMode ? <p className="mt-3 text-sm">{t("guestNote")}</p> : null}
             {hello ? <p className="mt-6 font-serif text-2xl">{hello}</p> : null}
             <p className="mt-6 text-sm min-[900px]:mt-8">{PERSONA_LINE[profile.persona]}</p>
-            <h1 className="mt-3 font-serif text-5xl leading-none min-[900px]:text-6xl" style={{ color }}>{stance.kicker}</h1>
-            {stance.detail ? (
-              <p className={stance.detailTone === "strong" ? "mt-3 font-serif text-2xl min-[900px]:text-3xl" : "mt-3 max-w-sm text-sm leading-snug text-ink/80"}>
-                {stance.detail}
-              </p>
-            ) : null}
-            <p className="mt-8 font-serif text-[1.65rem] leading-tight min-[900px]:text-[2.15rem]">{stance.lines[0]}</p>
-            <p className="mt-2 font-serif text-[1.65rem] leading-tight min-[900px]:text-[2.15rem]">{stance.lines[1]}</p>
-            <div className="mt-8 grid gap-5">
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.16em]">{t("food")}</p>
-                <p className="mt-1 text-base leading-snug">{stance.food}</p>
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.16em]">{t("move")}</p>
-                <p className="mt-1 text-base leading-snug">{stance.move}</p>
-              </div>
+            <p className="mt-6 font-serif text-[1.65rem] leading-tight min-[900px]:hidden">
+              {openingLine(profile, today, journal.logs)}
+            </p>
+            <div className="mt-8 hidden min-[900px]:block">
+              <Workbook journal={journal} today={today} onPlaced={placed} />
             </div>
-            <div className="mt-10 hidden min-[900px]:block">
-              <DayCheckin
-                profile={profile}
-                date={openDate}
-                existing={journal.logs[openDate]}
-                busy={journal.busy}
-                fullscreen={false}
-                onClose={() => undefined}
-                onSave={(log) => void journal.saveDay(log)}
-              />
-              <DayBoard date={openDate} journal={journal} />
-              <VoiceBox date={openDate} existing={journal.logs[openDate]} journal={journal} />
-            </div>
+            <details className="mt-8 hidden min-[900px]:block">
+              <summary className="min-h-12 cursor-pointer text-sm">Heute ablegen</summary>
+              <div className="mt-6">
+                <p className="font-serif text-4xl leading-none" style={{ color }}>{stance.kicker}</p>
+                {stance.detail ? (
+                  <p className={stance.detailTone === "strong" ? "mt-3 font-serif text-2xl" : "mt-3 max-w-sm text-sm leading-snug text-ink/80"}>
+                    {stance.detail}
+                  </p>
+                ) : null}
+                <p className="mt-4 font-serif text-xl leading-tight">{stance.lines[0]}</p>
+                <p className="mt-1 font-serif text-xl leading-tight">{stance.lines[1]}</p>
+                <div className="mt-6 grid gap-4">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.16em]">{t("food")}</p>
+                    <p className="mt-1 text-base leading-snug">{stance.food}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.16em]">{t("move")}</p>
+                    <p className="mt-1 text-base leading-snug">{stance.move}</p>
+                  </div>
+                </div>
+                <div className="mt-8">
+                  <DayCheckin
+                    profile={profile}
+                    date={openDate}
+                    existing={journal.logs[openDate]}
+                    busy={journal.busy}
+                    fullscreen={false}
+                    onClose={() => undefined}
+                    onSave={(log) => void journal.saveDay(log)}
+                  />
+                  <DayBoard date={openDate} journal={journal} />
+                  <VoiceBox date={openDate} existing={journal.logs[openDate]} journal={journal} />
+                </div>
+              </div>
+            </details>
           </header>
           <div className="mt-10 min-[900px]:mt-0">
             <div className="mb-4 flex gap-4 text-sm">
@@ -161,18 +181,26 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
           </div>
         </div>
       </div>
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-ink/10 bg-paper/92 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] min-[900px]:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-20 flex gap-3 border-t border-ink/10 bg-paper/92 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] min-[900px]:hidden">
+        <button type="button" className="min-h-14 flex-1 bg-ink text-paper" onClick={() => setTalk(true)}>
+          Mit Fravia planen
+        </button>
         <button
           type="button"
-          className="min-h-14 w-full bg-ink text-paper"
+          className="min-h-14 px-4"
           onClick={() => {
             setSelected(todayIso);
             setSheet(true);
           }}
         >
-          {journal.logs[todayIso] ? t("seeToday") : t("checkin")}
+          Heute
         </button>
       </div>
+      {talk ? (
+        <div className="fixed inset-0 z-40 bg-paper min-[900px]:hidden">
+          <Workbook journal={journal} today={today} onPlaced={placed} onClose={() => setTalk(false)} />
+        </div>
+      ) : null}
       {sheet ? (
         <div className="fixed inset-0 z-30 overflow-y-auto px-4 pt-[max(1rem,env(safe-area-inset-top))] min-[900px]:hidden" style={{ background: `radial-gradient(80% 40% at 0% 0%, color-mix(in srgb, ${color} 34%, transparent), transparent 70%), var(--paper)` }}>
           <DayCheckin

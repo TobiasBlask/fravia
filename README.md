@@ -1,6 +1,6 @@
 # Fravia
 
-Fravia plant deine Woche im Einklang mit deinem Zyklus. Nach der Anmeldung – oder im Gast-Modus, nur auf diesem Gerät – sagst du, wofür der Kalender da ist: Im Rhythmus, Auf der Pille, Mit Schmerz oder Wechseljahre. Danach zeigt der Monat die Phase, und du trägst den Tag ein: Energie, Beschwerden, Termine, Aufgaben, Essen, Bewegung.
+Fravia plant deine Woche im Einklang mit deinem Zyklus. Sie sagt zuerst, welche Tage tragen, und du antwortest mit einem Satz: Sport diese Woche, eine Feier in zwei Wochen, oder ein festes Datum. Sie schlägt den Tag vor und legt ihn erst nach deinem Ja in den Kalender. Die vier Lebensphasen ändern den Rat, nicht die Stimme: Im Rhythmus, Auf der Pille, Mit Schmerz, Wechseljahre. Der Monat, der Check-in und die Personas bleiben.
 
 Deutsch ist die Sprache, mit der ich dich anspreche. Englisch, Spanisch und Französisch stellst du in den Einstellungen um.
 

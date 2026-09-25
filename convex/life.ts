@@ -127,7 +127,7 @@ export const addEvent = mutation({
     const user = await requireUser(ctx);
     if (!user) throw new Error("Nicht angemeldet");
     const seriesId = crypto.randomUUID();
-    const freq = args.kind === "geburtstag" && args.freq === "none" ? "yearly" : args.freq;
+    const freq = args.freq;
     for (const date of seriesDates(args.date, freq, args.until)) {
       await ctx.db.insert("events", {
         userId: user._id,
