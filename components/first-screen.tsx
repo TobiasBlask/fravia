@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { parseISODate } from "@/lib/dates";
-import { WEEK_CHIPS, WEEK_QUESTION, weekPlacement, type Consequence, type Proposal } from "@/lib/plan";
+import Link from "next/link";
+import { iso, parseISODate } from "@/lib/dates";
+import { FINE_WEEK, WEEK_CHIPS, WEEK_QUESTION, weekPlacement, type Consequence, type Proposal } from "@/lib/plan";
 import type { DayEvent, DayLog, Profile } from "@/lib/types";
 import { dayMark, solidHex } from "@/lib/voice";
 
@@ -14,7 +14,6 @@ export function WeekAsk({
   busy,
   failed,
   onIntent,
-  onClear,
   onCommit,
 }: {
   profile: Profile;
@@ -24,88 +23,31 @@ export function WeekAsk({
   busy: boolean;
   failed: boolean;
   onIntent: (text: string) => void;
-  onClear: () => void;
   onCommit: (proposal: Proposal) => void;
 }) {
-  const [draft, setDraft] = useState("");
   const answer = intent ? weekPlacement(intent, profile, today, logs) : null;
-
-  function send(event: FormEvent) {
-    event.preventDefault();
-    const text = draft.trim();
-    if (!text) return;
-    onIntent(text);
-    setDraft("");
-  }
+  const first = answer?.proposals[0];
+  const second = answer?.proposals[1];
+  const color = first ? tone(profile, first.date, logs[first.date]) : "#1c1917";
 
   if (!answer) {
     return (
-      <div data-decision>
+      <div data-decision="ask">
         <p className="font-serif text-[1.75rem] leading-tight min-[900px]:text-4xl">{WEEK_QUESTION}</p>
-        <div className="mt-6 flex flex-wrap gap-2">
-          {WEEK_CHIPS.map((chip) => (
-            <button
-              key={chip}
-              type="button"
-              className="min-h-11 border border-ink/20 px-4 text-base"
-              onClick={() => onIntent(chip)}
-            >
-              {chip}
-            </button>
-          ))}
-        </div>
-        <form className="mt-6 flex items-end gap-2" onSubmit={send}>
-          <label className="sr-only" htmlFor="week-title">
-            Titel
-          </label>
-          <input
-            id="week-title"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="Titel"
-            autoComplete="off"
-            className="min-h-11 w-full border-b border-ink/30 bg-transparent"
-          />
-          <button type="submit" className="min-h-11 shrink-0 px-3">
-            Senden
-          </button>
-        </form>
+        <Chips onIntent={onIntent} />
       </div>
     );
   }
 
-  const first = answer.proposals[0];
-  const color = first ? tone(profile, first.date, logs[first.date]) : "#1c1917";
-
   return (
-    <div data-decision>
+    <div data-decision={first ? "answer" : "unfit"}>
       <p className="font-serif text-[1.75rem] leading-tight min-[900px]:text-4xl">{answer.sentence}</p>
       {answer.phase ? (
         <p className="mt-2 text-sm" style={{ color }}>
           {answer.phase}
         </p>
       ) : null}
-      {answer.proposals.length > 1 ? (
-        <div className="mt-8 grid gap-3">
-          {answer.proposals.map((proposal) => {
-            const when = dayParts(proposal.date);
-            return (
-              <div key={proposal.date} className="rounded-[12px] border border-ink/15 bg-paper px-4 py-4">
-                <p className="font-serif text-3xl leading-none">{when.weekday}</p>
-                <p className="mt-2 font-serif text-5xl leading-none">{when.day}.</p>
-                <button
-                  type="button"
-                  className="mt-4 min-h-11 bg-ink px-4 text-paper transition-opacity duration-150 disabled:opacity-50"
-                  disabled={busy}
-                  onClick={() => onCommit(proposal)}
-                >
-                  Eintragen
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      ) : first ? (
+      {first ? (
         <button
           type="button"
           className="mt-8 min-h-11 bg-ink px-4 text-paper transition-opacity duration-150 disabled:opacity-50"
@@ -114,10 +56,19 @@ export function WeekAsk({
         >
           Eintragen
         </button>
+      ) : (
+        <Chips onIntent={onIntent} />
+      )}
+      {second ? (
+        <button
+          type="button"
+          className="mt-2 block min-h-11 px-1 text-left"
+          disabled={busy}
+          onClick={() => onCommit(second)}
+        >
+          {whenLine(second.date, second.time)}
+        </button>
       ) : null}
-      <button type="button" className="mt-2 min-h-11 px-1" onClick={onClear}>
-        Anders
-      </button>
       {failed ? <p className="mt-2 text-sm">Das hat nicht geklappt.</p> : null}
     </div>
   );
@@ -129,6 +80,7 @@ export function ConsequenceLead({
   event,
   logs,
   busy,
+  failed,
   onMove,
   onLeave,
 }: {
@@ -137,67 +89,118 @@ export function ConsequenceLead({
   event?: DayEvent;
   logs: Record<string, DayLog>;
   busy: boolean;
+  failed: boolean;
   onMove: (date: string) => void;
   onLeave: () => void;
 }) {
   const color = event ? tone(profile, event.date, logs[event.date]) : "#1c1917";
-  const many = note.action === "move" && note.targets.length > 1;
+  const target = note.action === "move" ? note.targets[0] : undefined;
+  const other = note.action === "move" ? note.targets[1] : undefined;
 
   return (
-    <div data-decision className="mb-8">
+    <div data-decision="poor">
       <p className="font-serif text-[1.75rem] leading-tight min-[900px]:text-4xl">{note.sentence}</p>
       {note.phase ? (
         <p className="mt-2 text-sm" style={{ color }}>
           {note.phase}
         </p>
       ) : null}
-      {many ? (
-        <div className="mt-8 grid gap-3">
-          {note.targets.map((target) => {
-            const when = dayParts(target.date);
-            return (
-              <div key={target.date} className="rounded-[12px] border border-ink/15 bg-paper px-4 py-4">
-                <p className="font-serif text-3xl leading-none">{when.weekday}</p>
-                <p className="mt-2 font-serif text-5xl leading-none">{when.day}.</p>
-                <button
-                  type="button"
-                  className="mt-4 min-h-11 bg-ink px-4 text-paper transition-opacity duration-150 disabled:opacity-50"
-                  disabled={busy}
-                  onClick={() => onMove(target.date)}
-                >
-                  Verschieben
-                </button>
-              </div>
-            );
-          })}
-          <button type="button" className="min-h-11 px-1 text-left" disabled={busy} onClick={onLeave}>
-            So lassen
-          </button>
-        </div>
-      ) : note.action === "move" && note.targets[0] ? (
-        <div className="mt-8 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="min-h-11 bg-ink px-4 text-paper transition-opacity duration-150 disabled:opacity-50"
-            disabled={busy}
-            onClick={() => onMove(note.targets[0].date)}
-          >
-            Verschieben
-          </button>
-          <button type="button" className="min-h-11 px-3" disabled={busy} onClick={onLeave}>
-            So lassen
-          </button>
-        </div>
-      ) : (
+      {target ? (
         <button
           type="button"
           className="mt-8 min-h-11 bg-ink px-4 text-paper transition-opacity duration-150 disabled:opacity-50"
           disabled={busy}
-          onClick={onLeave}
+          onClick={() => onMove(target.date)}
         >
-          So lassen
+          Verschieben
         </button>
-      )}
+      ) : null}
+      {other ? (
+        <button
+          type="button"
+          className="mt-2 block min-h-11 px-1 text-left"
+          disabled={busy}
+          onClick={() => onMove(other.date)}
+        >
+          {whenLine(other.date)}
+        </button>
+      ) : null}
+      <button type="button" className={`${target ? "mt-2" : "mt-8"} block min-h-11 px-1 text-left`} disabled={busy} onClick={onLeave}>
+        So lassen
+      </button>
+      {failed ? <p className="mt-2 text-sm">Das hat nicht geklappt.</p> : null}
+    </div>
+  );
+}
+
+export function FineWeek({
+  profile,
+  today,
+  logs,
+  events,
+  checkin,
+  settings,
+  onCalendar,
+  onCheckin,
+  onOpen,
+}: {
+  profile: Profile;
+  today: Date;
+  logs: Record<string, DayLog>;
+  events: DayEvent[];
+  checkin: string;
+  settings: string;
+  onCalendar: () => void;
+  onCheckin: () => void;
+  onOpen: (date: string) => void;
+}) {
+  const todayIso = iso(today);
+  const mark = dayMark(profile, today, profile.persona === "pain" ? logs[todayIso] : undefined);
+  const phase = profile.persona === "menopause" ? "Schätzung" : mark.band;
+  const rows = [...events].sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? "") || a.title.localeCompare(b.title));
+
+  return (
+    <div data-decision="fine">
+      <p className="font-serif text-[1.75rem] leading-tight min-[900px]:text-4xl">{FINE_WEEK}</p>
+      {phase ? (
+        <p className="mt-2 text-sm" style={{ color: solidHex(mark.tint) }}>
+          {phase}
+        </p>
+      ) : null}
+      <div className="mt-8 grid">
+        {rows.map((event) => (
+          <button key={event.id} type="button" className="block min-h-11 py-2 text-left" onClick={() => onOpen(event.date)}>
+            <span className="block text-sm">{event.date === todayIso ? `Heute, ${parseISODate(event.date).getDate()}.` : whenLine(event.date)}</span>
+            <span className="mt-1 block text-base">
+              {event.time ? `${event.time} ` : ""}
+              {event.title}
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className="mt-8 flex flex-col">
+        <button type="button" className="min-h-11 text-left" onClick={onCalendar}>
+          Kalender
+        </button>
+        <button type="button" className="min-h-11 text-left" onClick={onCheckin}>
+          {checkin}
+        </button>
+        <Link href="/settings" className="inline-flex min-h-11 items-center">
+          {settings}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function Chips({ onIntent }: { onIntent: (text: string) => void }) {
+  return (
+    <div className="mt-6 flex flex-wrap gap-2">
+      {WEEK_CHIPS.map((chip) => (
+        <button key={chip} type="button" className="min-h-11 border border-ink/20 px-4 text-base" onClick={() => onIntent(chip)}>
+          {chip}
+        </button>
+      ))}
     </div>
   );
 }
@@ -206,8 +209,10 @@ function tone(profile: Profile, date: string, log?: DayLog) {
   return solidHex(dayMark(profile, parseISODate(date), profile.persona === "pain" ? log : undefined).tint);
 }
 
-function dayParts(date: string) {
+function whenLine(date: string, time?: string) {
   const value = parseISODate(date);
   const weekday = new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(value);
-  return { weekday: weekday.charAt(0).toUpperCase() + weekday.slice(1), day: value.getDate() };
+  const name = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+  const day = `${name}, ${value.getDate()}.`;
+  return time ? `${day} ${time}` : day;
 }

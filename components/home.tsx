@@ -8,8 +8,7 @@ import { api } from "@/convex/_generated/api";
 import { DayBoard } from "@/components/day-board";
 import { DayCheckin } from "@/components/day-checkin";
 import { EventSheet } from "@/components/event-sheet";
-import { ConsequenceLead, WeekAsk } from "@/components/first-screen";
-import { GoogleConnect } from "@/components/google-connect";
+import { ConsequenceLead, FineWeek, WeekAsk } from "@/components/first-screen";
 import { useLang } from "@/components/lang";
 import { MonthStage } from "@/components/month-stage";
 import { TimeGrid } from "@/components/time-grid";
@@ -44,6 +43,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
   const [quick, setQuick] = useState<{ date: string; time: string } | null>(null);
   const [quickTitle, setQuickTitle] = useState("");
   const [intent, setIntent] = useState<string | null>(null);
+  const [settled, setSettled] = useState(false);
   const [skipped, setSkipped] = useState<string[]>([]);
   const [placing, setPlacing] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -230,6 +230,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
         });
       }
       setIntent(null);
+      setSettled(true);
       placed(proposal.date);
     } catch {
       setFailed(true);
@@ -249,6 +250,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
       } else {
         await journal.moveEvent(id, date);
       }
+      setSettled(true);
       placed(date);
     } catch {
       setFailed(true);
@@ -266,7 +268,6 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
   const horizon = iso(addDays(today, 14));
   const waiting = Boolean(googleStatus?.connected) && googleEvents === null && !googleNote;
   const soon = shown.filter((event) => event.date >= todayIso && event.date < horizon);
-  const asking = !waiting && soon.length === 0 && (view === "day" || view === "week");
   const lead = !waiting && soon.some((event) => !event.shared) ? consequence(profile, today, shown, journal.logs, skipped) : null;
   const leadEvent = lead ? shown.find((event) => event.id === lead.eventId) : undefined;
   const reminders = dueReminders(shown, today).filter((event) => !hiddenReminders.includes(event.id));
@@ -295,6 +296,68 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
         .sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? ""))
         .slice(0, 3)
     : [];
+
+  if (!settled) {
+    const frame = "mx-auto min-h-dvh w-full max-w-xl px-5 pt-[max(2.75rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]";
+    return (
+      <>
+        <Wash color={color} />
+        <main className={frame}>
+          {waiting ? (
+            <p className="font-serif text-2xl leading-tight">{t("loading")}</p>
+          ) : soon.length === 0 ? (
+            <WeekAsk
+              profile={profile}
+              today={today}
+              logs={journal.logs}
+              intent={intent}
+              busy={placing}
+              failed={failed}
+              onIntent={setIntent}
+              onCommit={(proposal) => void commitNamed(proposal)}
+            />
+          ) : lead ? (
+            <ConsequenceLead
+              profile={profile}
+              note={lead}
+              event={leadEvent}
+              logs={journal.logs}
+              busy={placing}
+              failed={failed}
+              onMove={(date) => void shiftEvent(lead.eventId, date)}
+              onLeave={() => {
+                setSkipped((current) => [...current, lead.eventId]);
+                setSettled(true);
+                if (leadEvent) placed(leadEvent.date);
+              }}
+            />
+          ) : (
+            <FineWeek
+              profile={profile}
+              today={today}
+              logs={journal.logs}
+              events={soon}
+              checkin={t("checkin")}
+              settings={t("settings")}
+              onCalendar={() => {
+                setSettled(true);
+                placed(todayIso);
+              }}
+              onCheckin={() => {
+                setSettled(true);
+                setSelected(todayIso);
+                setSheet(true);
+              }}
+              onOpen={(date) => {
+                setSettled(true);
+                placed(date);
+              }}
+            />
+          )}
+        </main>
+      </>
+    );
+  }
 
   return (
     <>
@@ -341,7 +404,6 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
           <button type="button" className="hidden min-h-11 text-sm min-[900px]:inline" onClick={() => setTalk(true)}>Dialog</button>
           <button type="button" className="min-h-11 text-sm" onClick={() => journal.setRevising(true)}>{t("revise")}</button>
           <Link href="/settings" className="inline-flex min-h-11 items-center text-sm">{t("settings")}</Link>
-          <GoogleConnect />
           {journal.guestMode ? null : (
             <button type="button" className="min-h-11 text-sm" onClick={() => signOut({ redirectUrl: "/" })}>{t("signOut")}</button>
           )}
@@ -357,32 +419,8 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
           <div ref={stageRef} className="min-[900px]:flex min-[900px]:h-[calc(100dvh-7.5rem)] min-[900px]:min-h-0 min-[900px]:flex-col min-[900px]:overflow-hidden min-[900px]:bg-paper">
             {googleNote ? <p className="mb-3 text-sm">{googleNote}</p> : null}
             {waiting ? <p className="font-serif text-2xl leading-tight">{t("loading")}</p> : null}
-            {asking ? (
-              <WeekAsk
-                profile={profile}
-                today={today}
-                logs={journal.logs}
-                intent={intent}
-                busy={placing}
-                failed={failed}
-                onIntent={setIntent}
-                onClear={() => setIntent(null)}
-                onCommit={(proposal) => void commitNamed(proposal)}
-              />
-            ) : null}
-            {!asking && lead ? (
-              <ConsequenceLead
-                profile={profile}
-                note={lead}
-                event={leadEvent}
-                logs={journal.logs}
-                busy={placing}
-                onMove={(date) => void shiftEvent(lead.eventId, date)}
-                onLeave={() => setSkipped((current) => [...current, lead.eventId])}
-              />
-            ) : null}
-            {failed && !asking ? <p className="mb-3 text-sm">Das hat nicht geklappt.</p> : null}
-            {asking ? null : reminders.length > 0 ? (
+            {failed ? <p className="mb-3 text-sm">Das hat nicht geklappt.</p> : null}
+            {reminders.length > 0 ? (
               <div className="mb-3 grid gap-2">
                 {reminders.map((event) => (
                   <div key={event.id} className="flex items-center justify-between gap-3 border-b border-ink/15 pb-2">
@@ -394,7 +432,7 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
                 ))}
               </div>
             ) : null}
-            {asking || waiting ? null : <>
+            {waiting ? null : <>
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <input
                 type="date"

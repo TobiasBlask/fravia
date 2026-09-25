@@ -396,6 +396,8 @@ function cap(value: string) {
 
 export const WEEK_QUESTION = "Was willst du diese Woche unterbringen?";
 
+export const FINE_WEEK = "Diese Woche passt.";
+
 export const WEEK_CHIPS = ["Sport", "Gespräch", "Feier", "Fokus"] as const;
 
 export type WeekAnswer = {
@@ -441,27 +443,29 @@ export function weekPlacement(text: string, profile: Profile, today: Date, logs:
   });
   const proposals = [item(ranked[0].date), ...(second ? [item(second.date)] : [])];
   const phase = phaseLabel(profile, ranked[0].date, logs[iso(ranked[0].date)]);
+  const firstWhen = clockLine(ranked[0].date, place.time);
   if (profile.persona === "menopause") {
     const sentence = second
-      ? `${cap(weekday(ranked[0].date))} oder ${weekday(ranked[1].date)}. Beides ist eine Schätzung.`
-      : `${cap(weekday(ranked[0].date))} wäre möglich. Es ist eine Schätzung.`;
+      ? `${firstWhen} oder ${clockLine(ranked[1].date, place.time)}. Beides ist eine Schätzung.`
+      : `${firstWhen}. Es ist eine Schätzung.`;
     return { sentence, phase, proposals };
   }
   if (profile.persona === "pill") {
     const energy = logs[iso(ranked[0].date)]?.energy;
     const sentence = energy
-      ? `${cap(weekday(ranked[0].date))} passt für ${title}. Du hast dort Energie ${energy} eingetragen.`
-      : `${cap(weekday(ranked[0].date))} passt für ${title}.`;
+      ? `${firstWhen}. Du hast dort Energie ${energy} eingetragen.`
+      : `${firstWhen}.`;
     return { sentence, phase, proposals };
   }
   if (profile.persona === "pain") {
-    return {
-      sentence: `${cap(weekday(ranked[0].date))} passt für ${title}. Kurz und früh.`,
-      phase,
-      proposals,
-    };
+    return { sentence: `${firstWhen}. Kurz und früh.`, phase, proposals };
   }
-  return { sentence: `${cap(weekday(ranked[0].date))} passt für ${title}.`, phase, proposals };
+  return { sentence: `${firstWhen}.`, phase, proposals };
+}
+
+function clockLine(day: Date, time?: string) {
+  const name = cap(weekday(day));
+  return time ? `${name}, ${time}` : name;
 }
 
 export function consequence(
