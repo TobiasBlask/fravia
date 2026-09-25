@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { iso, parseISODate } from "@/lib/dates";
-import { FINE_WEEK, WEEK_CHIPS, WEEK_QUESTION, weekPlacement, type Consequence, type Proposal } from "@/lib/plan";
+import { FINE_WEEK, WEEK_CHIPS, WEEK_QUESTION, weekPlacement, type Consequence, type Proposal, type WeekPlan } from "@/lib/plan";
 import type { DayEvent, DayLog, Profile } from "@/lib/types";
 import { dayMark, solidHex } from "@/lib/voice";
 
@@ -14,7 +15,8 @@ export function WeekAsk({
   busy,
   failed,
   onIntent,
-  onCommit,
+  onTake,
+  onOne,
 }: {
   profile: Profile;
   today: Date;
@@ -23,11 +25,19 @@ export function WeekAsk({
   busy: boolean;
   failed: boolean;
   onIntent: (text: string) => void;
-  onCommit: (proposal: Proposal) => void;
+  onTake: (proposals: Proposal[]) => void;
+  onOne: (proposal: Proposal) => void;
 }) {
+  const [which, setWhich] = useState(0);
+  const [seen, setSeen] = useState(intent);
+  if (intent !== seen) {
+    setSeen(intent);
+    setWhich(0);
+  }
   const answer = intent ? weekPlacement(intent, profile, today, logs) : null;
-  const first = answer?.proposals[0];
-  const second = answer?.proposals[1];
+  const plan = answer && answer.plans.length > 0 ? answer.plans[Math.min(which, answer.plans.length - 1)] : null;
+  const first = plan?.proposals[0];
+  const other = answer && answer.plans.length > 1 ? answer.plans[which === 0 ? 1 : 0].proposals[0] : undefined;
   const color = first ? tone(profile, first.date, logs[first.date]) : "#1c1917";
 
   if (!answer) {
@@ -41,34 +51,35 @@ export function WeekAsk({
 
   return (
     <div data-decision={first ? "answer" : "unfit"}>
-      <p className="font-serif text-[1.75rem] leading-tight min-[900px]:text-4xl">{answer.sentence}</p>
+      <p className="font-serif text-[2rem] leading-tight min-[900px]:text-5xl">{answer.sentence}</p>
       {answer.phase ? (
         <p className="mt-2 text-sm" style={{ color }}>
           {answer.phase}
         </p>
       ) : null}
-      {first ? (
-        <button
-          type="button"
-          className="mt-8 min-h-11 bg-ink px-4 text-paper transition-opacity duration-150 disabled:opacity-50"
-          disabled={busy}
-          onClick={() => onCommit(first)}
-        >
-          Eintragen
-        </button>
+      {plan && first ? (
+        <>
+          <WeekStrip plan={plan} today={today} profile={profile} logs={logs} />
+          <button
+            type="button"
+            className="mt-8 min-h-11 bg-ink px-4 text-paper transition-opacity duration-150 disabled:opacity-50"
+            disabled={busy}
+            onClick={() => onTake(plan.proposals)}
+          >
+            Woche übernehmen
+          </button>
+          {other ? (
+            <button type="button" className="mt-2 block min-h-11 px-1 text-left" disabled={busy} onClick={() => setWhich(which === 0 ? 1 : 0)}>
+              {whenLine(other.date, other.time)}
+            </button>
+          ) : null}
+          <button type="button" className="mt-2 block min-h-11 px-1 text-left" disabled={busy} onClick={() => onOne(first)}>
+            Nur den einen Termin
+          </button>
+        </>
       ) : (
         <Chips onIntent={onIntent} />
       )}
-      {second ? (
-        <button
-          type="button"
-          className="mt-2 block min-h-11 px-1 text-left"
-          disabled={busy}
-          onClick={() => onCommit(second)}
-        >
-          {whenLine(second.date, second.time)}
-        </button>
-      ) : null}
       {failed ? <p className="mt-2 text-sm">Das hat nicht geklappt.</p> : null}
     </div>
   );
@@ -191,6 +202,54 @@ export function FineWeek({
       </div>
     </div>
   );
+}
+
+function WeekStrip({
+  plan,
+  today,
+  profile,
+  logs,
+}: {
+  plan: WeekPlan;
+  today: Date;
+  profile: Profile;
+  logs: Record<string, DayLog>;
+}) {
+  const todayIso = iso(today);
+  const hasToday = plan.days.includes(todayIso);
+  return (
+    <div className="mt-8 grid grid-cols-7 gap-1" data-week>
+      {plan.days.map((date) => {
+        const blocks = plan.proposals.filter((item) => item.date === date);
+        const mark = dayMark(profile, parseISODate(date), profile.persona === "pain" ? logs[date] : undefined);
+        const color = solidHex(mark.tint);
+        const isToday = date === todayIso;
+        return (
+          <div key={date} className="min-w-0" data-today={isToday ? "1" : undefined}>
+            {hasToday ? <p className={`text-center text-[10px] leading-none ${isToday ? "" : "invisible"}`}>Heute</p> : null}
+            <p className="mt-1 text-center text-[11px]">{shortDay(date)}</p>
+            <p className={`text-center font-serif text-xl leading-none ${isToday ? "underline decoration-2 underline-offset-4" : ""}`}>
+              {parseISODate(date).getDate()}
+            </p>
+            {blocks.map((block) => (
+              <p
+                key={`${block.date}-${block.title}`}
+                className="mt-1 rounded-[12px] px-0.5 py-1.5 text-center text-[10px] leading-tight text-paper"
+                style={{ backgroundColor: color }}
+              >
+                <span className="block">{block.title}</span>
+                {block.time ? <span className="block">{block.time}</span> : null}
+              </p>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function shortDay(date: string) {
+  return new Intl.DateTimeFormat("de-DE", { weekday: "short" }).format(parseISODate(date)).replace(".", "");
 }
 
 function Chips({ onIntent }: { onIntent: (text: string) => void }) {

@@ -226,6 +226,38 @@ export function useJournal() {
     await addEventMut(input);
   }
 
+  async function addEvents(inputs: Array<{
+    title: string;
+    kind: EventKind;
+    date: string;
+    time?: string;
+    end?: string;
+    note?: string;
+    location?: string;
+    remind?: number;
+    freq: SeriesFreq;
+    until?: string;
+  }>) {
+    if (guestMode) {
+      const rows = inputs.flatMap((input) => {
+        if (!input.title.trim()) return [];
+        const seriesId = crypto.randomUUID();
+        return seriesDates(input.date, input.freq, input.until).map((date) => ({
+          id: crypto.randomUUID(),
+          title: input.title.trim(),
+          kind: input.kind,
+          date,
+          freq: input.freq,
+          seriesId,
+          ...eventExtras(input),
+        }));
+      });
+      commit({ ...device, events: [...device.events, ...rows] });
+      return;
+    }
+    for (const input of inputs) await addEventMut(input);
+  }
+
   async function deleteEvent(id: string, series: boolean) {
     if (guestMode) {
       const row = device.events.find((item) => item.id === id);
@@ -521,6 +553,7 @@ export function useJournal() {
     saveProfile,
     saveDay,
     addEvent,
+    addEvents,
     deleteEvent,
     moveEvent,
     patchEvent,

@@ -202,36 +202,47 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
     setQuickTitle("");
   }
 
-  async function commitNamed(proposal: Proposal) {
+  async function commitNamed(list: Proposal[], mode: "week" | "one") {
+    const proposals = mode === "one" ? list.slice(0, 1) : list;
+    if (proposals.length === 0) return;
     setPlacing(true);
     setFailed(false);
     try {
-      if (proposal.kind === "todo") {
-        await journal.addTodo({ title: proposal.title, date: proposal.date, freq: "none" });
-      } else if (googleStatus?.connected) {
-        const result = await createGoogle({
-          title: proposal.title,
-          date: proposal.date,
-          ...(proposal.time ? { time: proposal.time } : {}),
-          ...(proposal.end ? { end: proposal.end } : {}),
-          ...(proposal.note ? { note: proposal.note } : {}),
-        });
-        if (!result.ok) throw new Error("google");
+      if (googleStatus?.connected) {
+        for (const proposal of proposals) {
+          const result = await createGoogle({
+            title: proposal.title,
+            date: proposal.date,
+            ...(proposal.time ? { time: proposal.time } : {}),
+            ...(proposal.end ? { end: proposal.end } : {}),
+            ...(proposal.note ? { note: proposal.note } : {}),
+          });
+          if (!result.ok) throw new Error("google");
+        }
         setGoogleTick((current) => current + 1);
       } else {
-        await journal.addEvent({
+        await journal.addEvents(proposals.filter((proposal) => proposal.kind !== "todo").map((proposal) => ({
           title: proposal.title,
-          kind: proposal.kind,
+          kind: proposal.kind === "todo" ? "termin" : proposal.kind,
           date: proposal.date,
-          freq: "none",
+          freq: "none" as const,
           ...(proposal.time ? { time: proposal.time } : {}),
           ...(proposal.end ? { end: proposal.end } : {}),
           ...(proposal.note ? { note: proposal.note } : {}),
-        });
+        })));
       }
       setIntent(null);
-      setSettled(true);
-      placed(proposal.date);
+      const date = proposals[0].date;
+      if (mode === "week") {
+        setSelected(date);
+        setCursor(parseISODate(date));
+        setPicked("week");
+        setTalk(false);
+        setSettled(true);
+      } else {
+        setSettled(true);
+        placed(date);
+      }
     } catch {
       setFailed(true);
     } finally {
@@ -314,7 +325,8 @@ export function Home({ journal }: { journal: ReturnType<typeof useJournal> }) {
               busy={placing}
               failed={failed}
               onIntent={setIntent}
-              onCommit={(proposal) => void commitNamed(proposal)}
+              onTake={(proposals) => void commitNamed(proposals, "week")}
+              onOne={(proposal) => void commitNamed([proposal], "one")}
             />
           ) : lead ? (
             <ConsequenceLead

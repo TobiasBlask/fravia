@@ -1,4 +1,4 @@
-import { addDays, iso, parseISODate, startOfWeek } from "./dates";
+import { addDays, iso, parseISODate, startOfWeek, weekDates } from "./dates";
 import type { DayEvent, DayLog, EventKind, Profile } from "./types";
 import { dayMark } from "./voice";
 
@@ -400,10 +400,16 @@ export const FINE_WEEK = "Diese Woche passt.";
 
 export const WEEK_CHIPS = ["Sport", "Gespräch", "Feier", "Fokus"] as const;
 
+export type WeekPlan = {
+  proposals: Proposal[];
+  days: string[];
+};
+
 export type WeekAnswer = {
   sentence: string;
   phase: string;
   proposals: Proposal[];
+  plans: WeekPlan[];
 };
 
 export type Consequence = {
@@ -414,53 +420,260 @@ export type Consequence = {
   targets: Array<{ date: string }>;
 };
 
+type DayWindow = "bleed" | "early" | "high" | "low" | "unknown";
+type BlockRole = "main" | "easy" | "rest" | "quiet" | "after" | "short";
+
 export function weekPlacement(text: string, profile: Profile, today: Date, logs: Record<string, DayLog>): WeekAnswer {
   const trimmed = text.trim();
   const goal = goalOf(trimmed) ?? "treffen";
   const title = goalOf(trimmed) ? titleFor(goal, trimmed) : cap(trimmed);
-  const end = addDays(startOfWeek(today), 6);
-  const days: Date[] = [];
-  for (let cursor = today; iso(cursor) <= iso(end); cursor = addDays(cursor, 1)) days.push(new Date(cursor));
-  const ranked = rank(profile, days, logs, goal).filter((day) => day.score >= (HIGH.has(goal) ? 40 : 1));
-  if (ranked.length === 0) {
+  const ahead = Array.from({ length: 14 }, (_, index) => addDays(today, index));
+  let pool = ahead.filter((date) => canHold(profile, date, logs[iso(date)], goal));
+  pool = pool.sort((a, b) => compareMain(profile, a, b, logs, goal));
+  if (goal === "feier" || goal === "treffen") {
+    const room = pool.filter((date) => hasRoom(date, today));
+    if (room.length > 0) {
+      const keys = new Set(room.map((date) => iso(date)));
+      pool = [...room, ...pool.filter((date) => !keys.has(iso(date)))];
+    }
+  }
+  if (pool.length === 0) {
     return {
       sentence: unfitWeek(profile, today, logs),
       phase: phaseLabel(profile, today, logs[iso(today)]),
       proposals: [],
+      plans: [],
     };
   }
-  const second = profile.persona === "menopause" ? ranked[1] : undefined;
-  const place = placement(goal, profile);
-  const item = (day: Date): Proposal => ({
-    date: iso(day),
+  const mains = profile.persona === "menopause" ? guessPair(pool) : [pool[0]];
+  const plans = mains.map((date) => buildPlan(profile, today, logs, goal, title, date));
+  const first = plans[0].proposals[0];
+  const phase = phaseLabel(profile, parseISODate(first.date), logs[first.date]);
+  if (profile.persona === "menopause" && plans[1]) {
+    const other = plans[1].proposals[0];
+    return {
+      sentence: `${clockLine(parseISODate(first.date), first.time)} oder ${clockLine(parseISODate(other.date), other.time)}. Beides ist eine Schätzung.`,
+      phase,
+      proposals: plans[0].proposals,
+      plans,
+    };
+  }
+  return {
+    sentence: reasonLine(profile, parseISODate(first.date), logs[first.date], first.time ?? "", goal),
+    phase,
+    proposals: plans[0].proposals,
+    plans,
+  };
+}
+
+function guessPair(pool: Date[]) {
+  if (pool.length < 2) return pool;
+  const first = pool[0];
+  const spaced = pool.find((date) => iso(date) >= iso(addDays(first, 2)));
+  return spaced ? [first, spaced] : [pool[0], pool[1]];
+}
+
+function compareMain(profile: Profile, a: Date, b: Date, logs: Record<string, DayLog>, goal: Goal) {
+  const aw = windowRank(dayWindow(profile, a, logs[iso(a)]));
+  const bw = windowRank(dayWindow(profile, b, logs[iso(b)]));
+  if (aw !== bw) return bw - aw;
+  const as = scoreDay(profile, a, logs[iso(a)], goal);
+  const bs = scoreDay(profile, b, logs[iso(b)], goal);
+  if (as !== bs) return bs - as;
+  return iso(a).localeCompare(iso(b));
+}
+
+function canHold(profile: Profile, date: Date, log: DayLog | undefined, goal: Goal) {
+  if (profile.persona === "pain" && hardPain(log) && HIGH.has(goal)) return false;
+  const slot = dayWindow(profile, date, log);
+  if (profile.persona === "menopause") return slot === "high" || scoreDay(profile, date, log, goal) >= 40;
+  return (slot === "high" || slot === "early") && scoreDay(profile, date, log, goal) >= 40;
+}
+
+function hasRoom(date: Date, today: Date) {
+  const prev = addDays(date, -1);
+  const next = addDays(date, 1);
+  const week = new Set(weekDates(date).map((day) => iso(day)));
+  return iso(prev) >= iso(today) && week.has(iso(prev)) && week.has(iso(next));
+}
+
+function dayWindow(profile: Profile, date: Date, log?: DayLog): DayWindow {
+  if (profile.persona === "menopause") {
+    if (!log) return "unknown";
+    if (log.heat === "hot" || log.mood === "raw" || log.sleep === "short") return "low";
+    if (log.heat === "warm" || log.sleep === "broken" || log.mood === "thin") return "low";
+    if (log.sleep === "steady" || log.mood === "even" || (log.energy ?? 0) >= 4) return "high";
+    return "unknown";
+  }
+  if (profile.persona === "pill") {
+    if ((log?.energy ?? 0) >= 4) return "high";
+    const band = dayMark(profile, date).band;
+    if (band === "Pause") return "bleed";
+    if (band === "Anlauf") return "early";
+    if (band === "Mitte") return "high";
+    if (band === "Vor der Pause") return "low";
+    return "unknown";
+  }
+  const mark = dayMark(profile, date);
+  if (!profile.lastPeriodStart || mark.tint === "paper") return "unknown";
+  const ovulation = Math.max((profile.cycleLength ?? 28) - (profile.lutealLength ?? 14), (profile.periodLength ?? 5) + 1);
+  const late = mark.tint === "follicular" && (mark.cycleDay ?? 0) >= ovulation - 3;
+  if (mark.tint === "menstruation") return "bleed";
+  if (mark.tint === "ovulation" || late) return "high";
+  if (mark.tint === "follicular") return "early";
+  if (mark.tint === "luteal") return "low";
+  return "unknown";
+}
+
+function windowRank(slot: DayWindow) {
+  if (slot === "high") return 3;
+  if (slot === "early") return 2;
+  if (slot === "low") return 1;
+  return 0;
+}
+
+function buildPlan(
+  profile: Profile,
+  today: Date,
+  logs: Record<string, DayLog>,
+  goal: Goal,
+  title: string,
+  main: Date,
+): WeekPlan {
+  const used = [iso(main)];
+  const open = () => weekDates(main).filter((date) => iso(date) >= iso(today) && !used.includes(iso(date)));
+  const take = (date: Date | undefined) => {
+    if (!date) return;
+    used.push(iso(date));
+  };
+  const proposals = [makeBlock(main, goal, title, profile, logs[iso(main)], "main", goal === "sport" ? "sport" : "termin")];
+  if (goal === "sport") {
+    const rest = open().find((date) => dayWindow(profile, date, logs[iso(date)]) === "bleed")
+      ?? [...open()].sort((a, b) => iso(b).localeCompare(iso(a)))[0];
+    take(rest);
+    const easy = open().find((date) => !hardDay(profile, logs[iso(date)]) && (dayWindow(profile, date, logs[iso(date)]) === "early" || dayWindow(profile, date, logs[iso(date)]) === "low"))
+      ?? open().find((date) => !hardDay(profile, logs[iso(date)]));
+    take(easy);
+    if (easy) proposals.push(makeBlock(easy, goal, "Leicht", profile, logs[iso(easy)], "easy", "sport"));
+    if (rest) proposals.push(makeBlock(rest, "erholung", "Ruhe", profile, logs[iso(rest)], "rest", "termin"));
+  } else if (goal === "feier") {
+    const quiet = open().find((date) => iso(date) === iso(addDays(main, -1)))
+      ?? open().find((date) => {
+        const slot = dayWindow(profile, date, logs[iso(date)]);
+        return slot === "bleed" || slot === "low";
+      });
+    take(quiet);
+    const after = open().find((date) => iso(date) === iso(addDays(main, 1)));
+    take(after);
+    if (quiet) proposals.push(makeBlock(quiet, "erholung", "Ruhig", profile, logs[iso(quiet)], "quiet", "termin"));
+    if (after) proposals.push(makeBlock(after, "erholung", "Leicht", profile, logs[iso(after)], "after", "termin"));
+  } else if (goal === "treffen") {
+    const quiet = open().find((date) => iso(date) === iso(addDays(main, -1)))
+      ?? open().find((date) => !hardDay(profile, logs[iso(date)]));
+    take(quiet);
+    const after = open().find((date) => iso(date) === iso(addDays(main, 1)) && !hardDay(profile, logs[iso(date)]))
+      ?? open().find((date) => !hardDay(profile, logs[iso(date)]));
+    take(after);
+    if (quiet) proposals.push(makeBlock(quiet, "erholung", "Ruhig", profile, logs[iso(quiet)], "quiet", "termin"));
+    if (after) proposals.push(makeBlock(after, "erholung", "Leicht", profile, logs[iso(after)], "after", "termin"));
+  } else {
+    const second = open().find((date) => {
+      const slot = dayWindow(profile, date, logs[iso(date)]);
+      return (slot === "high" || slot === "early") && !hardDay(profile, logs[iso(date)]);
+    });
+    take(second);
+    const rest = open().find((date) => dayWindow(profile, date, logs[iso(date)]) === "bleed")
+      ?? open().find((date) => dayWindow(profile, date, logs[iso(date)]) === "low")
+      ?? [...open()].sort((a, b) => iso(b).localeCompare(iso(a)))[0];
+    take(rest);
+    if (second) proposals.push(makeBlock(second, goal, "Kurz", profile, logs[iso(second)], "short", "termin"));
+    if (rest) proposals.push(makeBlock(rest, "erholung", "Ruhe", profile, logs[iso(rest)], "rest", "termin"));
+  }
+  return { proposals, days: weekDates(main).map((date) => iso(date)) };
+}
+
+function hardDay(profile: Profile, log?: DayLog) {
+  return profile.persona === "pain" && hardPain(log);
+}
+
+function makeBlock(
+  date: Date,
+  goal: Goal,
+  title: string,
+  profile: Profile,
+  log: DayLog | undefined,
+  role: BlockRole,
+  kind: Proposal["kind"],
+): Proposal {
+  const place = clockFor(goal, profile, date, log, role);
+  return {
+    date: iso(date),
     goal,
-    kind: place.kind === "todo" ? "termin" : place.kind,
+    kind: kind === "todo" ? "termin" : kind,
     title,
     time: place.time,
     end: place.end,
     note: place.note,
     fixed: false,
-  });
-  const proposals = [item(ranked[0].date), ...(second ? [item(second.date)] : [])];
-  const phase = phaseLabel(profile, ranked[0].date, logs[iso(ranked[0].date)]);
-  const firstWhen = clockLine(ranked[0].date, place.time);
-  if (profile.persona === "menopause") {
-    const sentence = second
-      ? `${firstWhen} oder ${clockLine(ranked[1].date, place.time)}. Beides ist eine Schätzung.`
-      : `${firstWhen}. Es ist eine Schätzung.`;
-    return { sentence, phase, proposals };
+  };
+}
+
+function clockFor(goal: Goal, profile: Profile, date: Date, log: DayLog | undefined, role: BlockRole) {
+  const pain = profile.persona === "pain";
+  const low = dayWindow(profile, date, log) === "low";
+  if (role === "rest") return { time: "15:00", end: "16:00", note: "Ruhe." };
+  if (role === "quiet") return { time: "16:00", end: "17:00", note: "Ruhig davor." };
+  if (role === "after") return { time: "09:00", end: "10:00", note: "Nichts Schweres." };
+  if (role === "easy") {
+    return pain ? { time: "10:00", end: "10:30", note: "Kurz." } : { time: "10:00", end: "10:45" };
   }
+  if (role === "short") return { time: "09:00", end: "10:00" };
+  if (goal === "fokus" || goal === "arbeit") {
+    if (pain) return { time: "09:00", end: "10:00", note: "Kurz und früh." };
+    if (low) return { time: "09:00", end: "10:00", note: "Kürzer." };
+    return dayWindow(profile, date, log) === "early"
+      ? { time: "09:00", end: "10:30" }
+      : { time: "09:00", end: "11:30" };
+  }
+  if (goal === "feier") {
+    if (pain || low) return { time: "19:00", end: "21:00", note: "Kürzer." };
+    return { time: "19:00", end: "22:00" };
+  }
+  if (goal === "treffen") {
+    if (pain) return { time: "17:00", end: "18:00" };
+    if (low) return { time: "17:30", end: "18:30" };
+    return { time: "18:00", end: "19:30" };
+  }
+  if (pain) return { time: "08:30", end: "09:15", note: "Kurz und früh." };
+  if (low) return { time: "17:00", end: "17:45", note: "Kürzer." };
+  return { time: "18:00", end: "19:00" };
+}
+
+function reasonLine(profile: Profile, date: Date, log: DayLog | undefined, time: string, goal: Goal) {
+  const when = time ? `${cap(weekday(date))}, ${time}` : cap(weekday(date));
+  if (profile.persona === "menopause") return `${when}. Es ist eine Schätzung.`;
   if (profile.persona === "pill") {
-    const energy = logs[iso(ranked[0].date)]?.energy;
-    const sentence = energy
-      ? `${firstWhen}. Du hast dort Energie ${energy} eingetragen.`
-      : `${firstWhen}.`;
-    return { sentence, phase, proposals };
+    if ((log?.energy ?? 0) >= 4) return `${when}. Du hast dort Energie ${log?.energy} eingetragen.`;
+    const band = dayMark(profile, date).band;
+    if (band === "Mitte") return `${when}. Du bist in der Mitte.`;
+    if (band === "Anlauf") return `${when}. Du bist im Anlauf.`;
+    if (band === "Vor der Pause") return `${when}. Du bist vor der Pause.`;
+    if (band === "Pause") return `${when}. Du bist in der Pause.`;
+    return `${when}.`;
   }
   if (profile.persona === "pain") {
-    return { sentence: `${firstWhen}. Kurz und früh.`, phase, proposals };
+    if (goal === "feier" || goal === "treffen") return `${when}. Nicht an einem Tag mit starkem Schmerz.`;
+    return `${when}. Kurz und früh.`;
   }
-  return { sentence: `${firstWhen}.`, phase, proposals };
+  const mark = dayMark(profile, date);
+  const ovulation = Math.max((profile.cycleLength ?? 28) - (profile.lutealLength ?? 14), (profile.periodLength ?? 5) + 1);
+  const late = mark.tint === "follicular" && (mark.cycleDay ?? 0) >= ovulation - 3;
+  if (mark.tint === "ovulation") return `${when}. Du bist um den Eisprung.`;
+  if (late) return `${when}. Du bist in der späten Follikelphase.`;
+  if (mark.tint === "follicular") return `${when}. Die Menstruation ist vorbei.`;
+  if (mark.tint === "luteal") return `${when}. Du bist in der Lutealphase. Kürzer.`;
+  if (mark.tint === "menstruation") return `${when}. Du bist in der Menstruation.`;
+  return `${when}. Trag den Periodenstart ein, dann sage ich die Phase.`;
 }
 
 function clockLine(day: Date, time?: string) {
